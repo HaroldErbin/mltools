@@ -1,1 +1,2 @@
-# -*- coding: utf-8 -*-
+from .data.structure import DataStructure
+from .models.linear import LinearRegression

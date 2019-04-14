@@ -72,3 +72,27 @@ def deep_model():
     model = None
 
     return model, {'model': model}
+
+# layers: tuple of int, list or dict
+# if int: number of units
+# if list: (number of units, kernel size)
+# if dict: arguments (include all elements of layers)
+
+
+#def conv_block(x, layers, d=2, pooling_kernel)
+#    # each parameter can be passed as a global parameter and overriden
+#    # as a parameter in layers
+#
+#    layers = [(layer,) if isinstance(layer, int) else layer for layer in layers]
+#    layers = [dict(zip(('units', 'pooling'), *layer))
+#              if isinstance(layer, (tuple, list)) else layer
+#              for layer in layers]
+#
+#    if d == 1:
+#        ConvLayer = layers.Conv1d
+#        MaxPoolLayer = layers.MaxPooling1d
+#
+#    for layer in layers:
+#
+#
+#    return x
