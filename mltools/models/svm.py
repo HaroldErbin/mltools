@@ -2,16 +2,21 @@
 
 from sklearn import svm
 
+from .model import Model
 
-class SVMModel:
 
-    def __init__(self, kernel='linear', method='classification'):
-        if method == 'classification':
+class SVM(Model):
+
+    def __init__(self, kernel='linear', method='clf'):
+        self.kernel = kernel
+        self.method = method
+
+        if method in ('clf', 'classif', 'classification'):
             if kernel == 'linear':
                 self.model = svm.LinearSVC
             else:
                 self.model = svm.SVC
-        elif method == 'regression':
+        elif method in ('reg', 'regression'):
             if kernel == 'linear':
                 self.model = svm.LinearSVR
             else:
