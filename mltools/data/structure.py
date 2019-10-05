@@ -30,7 +30,7 @@ _TYPES = ['scalar']
 
 class DataStructure:
     """
-    Represent data
+    Represent data with conversion
 
     The goal of this class is to convert data from one format to another,
     performing some automatic conversion depending on the type.
@@ -56,7 +56,7 @@ class DataStructure:
         following steps (by increasing priority):
         1. default to scalar
         2. inference from the argument `infer` (usually a dataframe)
-        3. if `features` is a dict, then the values
+        3. if `features` is a dict, then the values indicated
         4. the key in `datatypes` under which the feature appears
 
         Similarly, the form of the shapes will be determined according to
@@ -72,11 +72,12 @@ class DataStructure:
         # implemented by the class
         # TODO: consider more general method/function
         self.pipeline = pipeline
+
         if self.pipeline is not None:
             raise NotImplementedError
 
-        # if None, take all columns from dataframe
         if features is None:
+            # if None, take all columns from dataframe
             self.initial_features = []
         elif isinstance(features, dict):
             self.initial_features = list(features.values())
@@ -94,7 +95,7 @@ class DataStructure:
 
         # datatypes: scalar, vector, matrix, label, etc.
         # if not given, infer (at the end, all inputs should be given a type)
-        # infer shape for tensors, infer shape from data (use biggest shape)
+        # infer shape for tensors from data (use biggest shape)
         # (simpler to use than previous methods)
         # force_shape : force a specific shape for some object
 
