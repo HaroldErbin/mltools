@@ -2,9 +2,14 @@
 Get data samples from a dataset
 """
 
+import numpy as np
+import pandas as pd
 
-# TODO: samples based for more complicated cases
+
+# TODO: samples based on different datasets
 # example: one dataset for both training and testing, another just for testing
+
+# TODO: samples with stratification
 
 
 class RatioSample:
@@ -26,12 +31,12 @@ class RatioSample:
     # TODO: several datasets as arguments?
     # can decide to shuffle randomly between the different sets
 
-    # TODO: accept other types of dataset as arguments (dict)
+    # TODO: implement dict and array for dataset
 
     def __init__(self, dataset, ratios):
         """
         :param dataset: data to split in subsets
-        :type dataset: `pandas.DataFrame`
+        :type dataset: `pandas.DataFrame`, `numpy.array`, `dict`
         :param ratios: ratios used to divide the data in subsets
         :type ratios: `float`, `list`, `tuple` or `dict`
         """
@@ -64,6 +69,12 @@ class RatioSample:
         if sum_ratios > 1 or sum_ratios <= 0:
             raise ValueError("The sum of ratios must be between 0 and 1, "
                              "found {}.".format(sum_ratios))
+
+        if not isinstance(dataset, (pd.DataFrame, np.ndarray, dict)):
+            raise TypeError("Dataset must be a dict, an array or dataframe.")
+
+        if isinstance(dataset, (np.ndarray, dict)):
+            raise NotImplementedError
 
         self.dataset = dataset
 

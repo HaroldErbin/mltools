@@ -6,3 +6,5 @@ build: cleanbuild
 cleanbuild:
 	@rm -rf dist/ build/ mltools.egg-info
 
+test:
+	PYTHONPATH=. pytest
