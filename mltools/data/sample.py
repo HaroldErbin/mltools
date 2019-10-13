@@ -1,5 +1,8 @@
 """
 Get data samples from a dataset
+
+Note that these classes only provide method to split a dataset, it does not
+store any data or references to the data itself.
 """
 
 import numpy as np
@@ -9,28 +12,13 @@ import pandas as pd
 # TODO: sample with stratification
 # TODO: sample built from several datasets
 
-# Question: 1) store dataset in RatioSample, or 2) the opposite,
-# or 3) make a mixed class?
-# 1) Allow to quickly get data with sample['train'], but mix two different
-#   ideas in a single class
-# 2) more difficult to handle several datasets at once, except if there is
-#   already a class to handle several datasets;
-#   problem: to ensure that several calls always give the same outputs, this
-#   requires to always use a Dataset class (for quick problem we may prefer
-#   to use directly a dataframe)
-#   (i.e. where to cache indices?)
-# 3) maybe too heavy
-# one possibily for the problem in 2) is to cache the indices in the instance
-# itself using a dict id(obj) → indices (but is it reliable?)
-
 
 class RatioSample:
     """
     Select subsets from a dataset according to a list of ratios
 
     The ratios are defined by a list of numbers between 0 and 1, each
-    designated by a label. The latter is used by the ML algorithm to know
-    when to use each subset.
+    designated by a label. The latter can be used in ML algorithms.
 
     The ratios don't have to add to 1 (in that case, some data are not used).
 
@@ -38,27 +26,12 @@ class RatioSample:
     `val`, and `test`). All supplementary numbers are ignored. If the ratios
     of a list don't add to 1, then the different to 1 is added to the list.
     This helps to quickly change the number of training versus test data.
-
-    This class can extract samples from a dataset in two ways:
-    1. store dataset in attribute, get samples from keys
-    2. call the instance on
-    A dataset can be stored in an attribute either at initialisation, or by
-    calling the method `store_dataset`. In this case, the indices are cached
-    for efficiency and to ensure that the same subsets are obtained (if the
-    dataset does not change). The only consistency check which is performed
-    is that the length of the dataset does not change.
     """
 
-    # can decide to shuffle randomly between the different sets
-
-    def __init__(self, ratios, shuffle=False, dataset=None):
+    def __init__(self, ratios):
         """
         :param ratios: ratios used to divide the data in subsets
         :type ratios: `float`, `list`, `tuple` or `dict`
-        :param dataset: data to split in subsets
-        :type dataset: `pandas.DataFrame`, `numpy.array`, `dict`
-        :param shuffle: shuffle the dataset before extracting samples
-        :type shuffle: `bool`
         """
 
         if not isinstance(ratios, (dict, tuple, list, float)):
@@ -90,11 +63,6 @@ class RatioSample:
             raise ValueError("The sum of ratios must be between 0 and 1, "
                              "found {}.".format(sum_ratios))
 
-        self.shuffle = shuffle
-
-#        if dataset is not None:
-#            self.store_dataset(dataset, shuffle)
-
     def __repr__(self):
         return "<RatioSample: {}>".format(self.ratios)
 
@@ -102,15 +70,20 @@ class RatioSample:
         """
         Split a set of id into subsets according to the class ratios.
 
+        The dataset is shuffled before extracting the subsets if `shuffle`
+        is true.
+
         :param dataset: data to split in subsets
         :type dataset: `pandas.DataFrame`, `numpy.array`, `dict`
+        :param shuffle: shuffle the dataset before extracting subsets
+        :type shuffle: `bool`
+
         :return: subsets arranged in a `dict`
         :rtype: `dict`
         """
 
         if isinstance(dataset, dict):
-            # for a dict, get number of samples by looking at the first
-            # key
+            # for a dict, get number of samples by looking at the first key
             size = len(list(dataset.values())[0])
         elif isinstance(dataset, (pd.DataFrame, np.ndarray)):
             # works only for array, dataframe
@@ -140,6 +113,9 @@ class RatioSample:
 
         :param size: size of the dataset
         :type size: `int`
+        :param shuffle: shuffle the indices before extracting subsets
+        :type shuffle: `bool`
+
         :return: indices for each subsets arranged in a `dict`
         :rtype: `dict`
         """
@@ -161,21 +137,3 @@ class RatioSample:
         #   integers; this should work with more general id
 
         return splits
-
-#    def store_dataset(self, dataset):
-#
-#        self.dataset = dataset
-#
-#        self._size = len(dataset)
-#        self._indices = self.make_samples(self._size)
-#
-#        if not isinstance(dataset, (pd.DataFrame, np.ndarray, dict)):
-#            raise TypeError("Dataset must be a dict, an array or dataframe.")
-#
-#        if isinstance(dataset, (np.ndarray, dict)):
-#            raise NotImplementedError
-#
-#        self.dataset = dataset
-#
-#        # cache id for the different subsets
-#        self._index_cache = []
