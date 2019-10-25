@@ -21,6 +21,8 @@ The data structure can present the data according to 4 modes:
 import numpy as np
 import pandas as pd
 
+from . import datatools
+
 
 # TODO: when transforming, if there is a single feature, can pass
 #   single instance (int, etc.) or vec
@@ -58,7 +60,7 @@ class DataStructure:
     """
 
     def __init__(self, features=None, datatypes=None, shapes=None,
-                 pipeline=None, scaling=None, infer=None,
+                 with_channels=None, pipeline=None, scaling=None, infer=None,
                  mode='flat'):
         """
         List of features to be transformed. The types can be inferred from
@@ -67,7 +69,12 @@ class DataStructure:
         `features` can be a list of features or a dict mapping features
         to types. `datatypes` is a dictionary mapping types to features
         (hence the opposite order). `shapes` is a dict of features mapping
-        to a shape used to enforce a specific shape.
+        to a shape used to enforce a specific shape. `with_channels` lists
+        all features which have more than one channel.
+
+        Tensors are assumed to have only one channel, except those listed in
+        `with_channels`. This means that a tensors will be reshaped to add a
+        dimension of size 1 as required by most models.
 
         The class will determine the types according according to the
         following steps (by increasing priority):
@@ -85,9 +92,11 @@ class DataStructure:
         In case 1., the biggest shape appearing in a column will be used.
 
         :param features: sequence of features or dict of features with datatype
-        :type features: any sequence, `dict`
+        :type features: list(str), dict(str, str|tuple)
+        :param with_channels: sequence of features with channels
+        :type with_channels: tuple(str)
         :param infer: data with named features to infer the structure
-        :type infer: `pandas.DataFrame`, `dict`
+        :type infer: dataframe, dict(str, array)
         """
 
         if infer is not None:
@@ -102,37 +111,48 @@ class DataStructure:
         else:
             infer_cols = None
 
-        self.initial_features = []
+        if with_channels is None:
+            self.with_channels = []
+        else:
+            if not isinstance(with_channels, (list, tuple)):
+                raise TypeError("`with_channels` must be a list or a tuple, "
+                                "{} found.".format(type(with_channels)))
+
+            self.with_channels = with_channels
+
+        def add_channel_dim(shape, feature):
+            shape = tuple(shape)
+            return shape if feature in self.with_channels else shape + (1,)
+
+        # list of feature names
+        self.features = []
+        # map feature to types
+        self.types = {}
+        # map tensor feature to shape
+        self.shapes = {}
 
         if features is None and datatypes is None:
-            self.initial_features += list(infer_cols)
+            # take all columns from `infer` as features if none is given
+            self.features += list(infer_cols)
         else:
             if isinstance(features, dict):
-                self.initial_features += list(features.keys())
+                self.features += list(features.keys())
             elif isinstance(features, (list, tuple)):
-                self.initial_features += list(features)
+                self.features += list(features)
 
             if isinstance(datatypes, dict):
-                self.initial_features += list(features.keys())
-
-        # TODO: update list of outputs
-        # example: after label binazer, or computing moments for vector
-        # (need to find how to get all names)
-        # use list() to copy
-        self.features = list(self.initial_features)
-
-        # store all types, irrespective of shape
-        self.feature_types = {}
-        self.feature_shapes = {}
+                self.features += list(features.keys())
 
         if isinstance(features, dict):
             for f, v in features.items():
                 # if the value is a shape, then the type must be a tensor
-                if isinstance(v, (tuple, list, np.ndarray)):
-                    self.feature_types[f] = 'tensor_{}d'.format(len(v))
-                    self.feature_shapes[f] = v
+                if isinstance(v, (tuple, list)):
+                    # add trivial channel if necessary
+                    shape = add_channel_dim(v, f)
+                    self.types[f] = 'tensor_{}d'.format(len(shape) - 1)
+                    self.shapes[f] = shape
                 elif isinstance(v, str):
-                    self.feature_types[f] = v
+                    self.types[f] = v
                 else:
                     raise ValueError("`{}` type not usable.".format(type(v)))
 
@@ -146,41 +166,43 @@ class DataStructure:
                     shape = np.shape(first)
                     # TODO: find maximal shape in series
 
+                    shape = add_channel_dim(shape, f)
+
                 # for dataframe only: infer[f].dtype
-                if f not in self.feature_types:
+                if f not in self.types:
                     if np.issubdtype(type(first), np.integer):
-                        self.feature_types[f] = 'integer'
+                        self.types[f] = 'integer'
                     elif np.issubdtype(type(first), np.floating):
-                        self.feature_types[f] = 'scalar'
+                        self.types[f] = 'scalar'
                     elif isinstance(first, (np.ndarray, list, tuple)):
-                        self.feature_types[f] = 'tensor_{}d'.format(len(shape))
-                        self.feature_shapes[f] = np.shape(first)
+                        self.types[f] = 'tensor_{}d'.format(len(shape) - 1)
+                        self.shapes[f] = shape
                     else:
                         raise TypeError("Type `{}` is not supported."
                                         .format(type(first)))
 
                 # for tensor types defined by features but without the shape
-                if (f not in self.feature_shapes
+                if (f not in self.shapes
                         and isinstance(first, (np.ndarray, list, tuple))):
-                    self.feature_shapes[f] = np.shape(first)
+                    self.shapes[f] = shape
 
         # replace tensor types for low dimensions
-        for f, t in self.feature_types.items():
+        for f, t in self.types.items():
             if t in _TENSOR_ALIAS:
-                self.feature_types[f] = _TENSOR_ALIAS[t]
+                self.types[f] = _TENSOR_ALIAS[t]
 
         # default type to scalar
         missing_types = {f: "scalar" for f in self.features
-                         if f not in self.feature_types}
-        self.feature_types.update(missing_types)
+                         if f not in self.types}
+        self.types.update(missing_types)
 
         for f in self.features:
-            if f not in self.feature_types:
+            if f not in self.types:
                 raise ValueError("The feature `{}` has no type.".format(f))
 
-        for f in self.feature_types:
+        for f in self.types:
             if (f in ('vector', 'matrix') or f.startswith('tensor')
-                    and f not in self.feature_shapes):
+                    and f not in self.shapes):
                 raise ValueError("The feature `{}` is a tensor without shape."
                                  .format(f))
 
@@ -200,7 +222,7 @@ class DataStructure:
             raise NotImplementedError
 
     def __repr__(self):
-        return "<DataStructure: {}>".format(list(self.feature_types.keys()))
+        return "<DataStructure: {}>".format(list(self.types.keys()))
 
     def fit(self, X, y):
 
@@ -208,12 +230,12 @@ class DataStructure:
 
     def transform(self, X, mode=None):
 
-        mode = None or self.mode
+        mode = mode or self.mode
 
         pass
 
     def inverse_transform(self, y, mode=None):
 
-        mode = None or self.mode
+        mode = mode or self.mode
 
         pass

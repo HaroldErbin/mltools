@@ -20,9 +20,9 @@ def test_structure_init_feature_dict():
                         'square': (2, 2)})
 
     assert ds.features == ['id', 'number', 'square']
-    assert ds.feature_types == {'id': 'integer', 'number': 'scalar',
-                                'square': 'matrix'}
-    assert ds.feature_shapes == {'square': (2, 2)}
+    assert ds.types == {'id': 'integer', 'number': 'scalar',
+                        'square': 'matrix'}
+    assert ds.shapes == {'square': (2, 2, 1)}
 
 
 def test_structure_init_feature_list():
@@ -30,8 +30,8 @@ def test_structure_init_feature_list():
     ds = DataStructure(['id', 'number'])
 
     assert ds.features == ['id', 'number']
-    assert ds.feature_types == {'id': 'scalar', 'number': 'scalar'}
-    assert ds.feature_shapes == {}
+    assert ds.types == {'id': 'scalar', 'number': 'scalar'}
+    assert ds.shapes == {}
 
 
 def test_structure_init_feature_infer():
@@ -39,9 +39,17 @@ def test_structure_init_feature_infer():
     ds = DataStructure(['id', 'number', 'square'], infer=df)
 
     assert ds.features == ['id', 'number', 'square']
-    assert ds.feature_types == {'id': 'integer', 'number': 'scalar',
-                                'square': 'matrix'}
-    assert ds.feature_shapes == {'square': (2, 2)}
+    assert ds.types == {'id': 'integer', 'number': 'scalar',
+                        'square': 'matrix'}
+    assert ds.shapes == {'square': (2, 2, 1)}
 
 
+def test_structure_init_feature_channels():
 
+    ds = DataStructure(['id', 'number', 'square'], infer=df,
+                       with_channels=['square'])
+
+    assert ds.features == ['id', 'number', 'square']
+    assert ds.types == {'id': 'integer', 'number': 'scalar',
+                        'square': 'vector'}
+    assert ds.shapes == {'square': (2, 2)}
