@@ -221,6 +221,16 @@ def pad_data(data, shape=None, value=0.):
     different samples.)
 
     A list or a tuple is converted to an array for simplicity.
+
+    :param data: data to pad
+    :type data: list, tuple, array, series, dataframe, dict
+    :param shape: shape of the new array
+    :type target_shape: tuple, dict(str, tuple|None)
+    :param value: value to use for padding
+    :type value: float
+
+    :return: data padded with the given values
+    :rtype: array | dict | dataframe
     """
 
     # if shape is not given, find the embedding shape
@@ -269,3 +279,31 @@ def pad_data(data, shape=None, value=0.):
                 df[c] = pad_data(data[c], s, value)
 
         return df
+
+
+def seq_to_array(data, shape=None):
+    """
+    Transform a sequence to an array.
+
+    This function is useful when the sequence contains tensors, especially
+    of different shapes.
+
+    If the values have different shapes, the data is padded to the embedding
+    shape. The shape can also be enforced.
+
+    :param data: data to convert to an array
+    :type data: array
+    :param shape: force embedding shape
+    :type target_shape: tuple
+
+    :return: original data written as an array
+    :rtype: array
+    """
+
+    data = pad_data(data, shape=None)
+
+    if isinstance(data, (tuple, list, np.ndarray)):
+        # for a tuple, a list or an array, the pad_data already does everything
+        return data
+    elif isinstance(data, pd.Series):
+        return np.stack(data.values)
