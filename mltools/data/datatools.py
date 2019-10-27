@@ -326,7 +326,9 @@ def tab_to_array(data):
     Convert a table to an array.
 
     All columns of the table are first converted to an array, which are then
-    flatten and finally merged together.
+    flatten and finally merged together. The result is a matrix where first
+    dimension is the number of samples and the second all other dimensions.
+    The latter can be computed with the function `linear_shape`.
 
     If a values in a column are tensors of different dimensions, then they
     are padded to reach the embedding shape before merging.
@@ -336,3 +338,74 @@ def tab_to_array(data):
     size = len(data[list(data.keys())[0]])
 
     return np.hstack([seq_to_array(data[k]).reshape(size, -1) for k in data])
+
+
+def linear_shape(shape, cum=False):
+    """
+    Compute the linear shape for a shape or a set of shapes.
+
+    The linear shape is the product of all entries of the shape together.
+    This corresponding to the size of the vector obtained by flattening the
+    tensor of the corresponding shape.
+
+    If `cum` is true, then `shape` must be a list of shapes. This describes
+    the shape of the vector in which all tensors can be embedded after
+    flattening.
+    """
+
+    if cum is True:
+        return int(sum(np.multiply.reduce(s) for s in shape))
+    else:
+        return np.multiply.reduce(shape)
+
+
+def linear_indices(shapes):
+    """
+    Give pair of indices to recover tensors embedded
+    """
+
+    # linear shape for each shape
+    lin_shapes = [linear_shape(s) for s in shapes]
+
+    # cumulative sum give end indices
+    end = np.cumsum(lin_shapes, dtype=int).tolist()
+
+    return list(zip([0] + end[:-1], end))
+
+
+def split_array(array, shapes):
+    """
+    Split matrix into arrays of lower dimensions.
+
+    Note that the sum of linear dimensions of all shapes may be smaller than
+    the linear dimension of the samples. This behaviour is not desirable but
+    is left in case of need.
+    On the other hand, there can be problem when the sum is bigger, such that
+    an error is always raised.
+    """
+
+    if len(array.shape) > 2:
+        raise ValueError("This function works only with matrix.")
+
+    target_dim = linear_shape(shapes, True)
+    dim = array.shape[1]
+
+    if target_dim > dim:
+        raise ValueError("The shapes given do not fit in the vector.")
+
+    indices = linear_indices(shapes)
+
+    return [array[:, slice(*ind)].reshape(-1, *s)
+            for s, ind in zip(shapes, indices)]
+
+
+def array_to_dict(array, shapes):
+    """
+    Convert an array to a dict of arrays.
+
+    The argument `shapes` is a dict associating keys to shapes.
+    """
+
+    array_list = split_array(array, list(shapes.values()))
+
+    return {k: a for k, a in zip(shapes.keys(), array_list)}

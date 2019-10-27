@@ -5,7 +5,9 @@ import pandas as pd
 
 from mltools.data.datatools import (tensor_name, tensor_dim, data_shapes,
                                     embedding_shape, is_homogeneous, pad_array,
-                                    pad_data, seq_to_array, tab_to_array)
+                                    pad_data, seq_to_array, tab_to_array,
+                                    linear_shape, linear_indices, split_array,
+                                    array_to_dict)
 
 
 s = 8
@@ -318,3 +320,62 @@ def test_tab_to_array():
                          in [col1, col2, col3, col4])).all()
 
     assert (tab_to_array(dic) == tab_to_array(df)).all()
+
+
+def test_linear_shape():
+
+    assert linear_shape(()) == 1
+    assert linear_shape((1,)) == 1
+    assert linear_shape((2,)) == 2
+    assert linear_shape((2, 3)) == 6
+
+
+def test_linear_shape_cum():
+
+    assert linear_shape([()], True) == 1
+    assert linear_shape([(), ()], True) == 2
+    assert linear_shape([(1,)], True) == 1
+
+    assert linear_shape([(), (2,)], True) == 3
+    assert linear_shape([(), (2, 3)], True) == 7
+    assert linear_shape([(), (2,), (3, 4)], True) == 15
+
+
+def test_linear_indices():
+
+    assert linear_indices([()]) == [(0, 1)]
+    assert linear_indices([(), ()]) == [(0, 1), (1, 2)]
+    assert linear_indices([(1,)]) == [(0, 1)]
+
+    assert linear_indices([(), (2,)]) == [(0, 1), (1, 3)]
+    assert linear_indices([(), (2, 3)]) == [(0, 1), (1, 7)]
+    assert linear_indices([(), (2,), (3, 4)]) == [(0, 1), (1, 3), (3, 15)]
+
+
+def test_split_array():
+
+    array = np.hstack(seq_to_array(x).reshape(5, -1) for x
+                      in [col1, col2, col3, col4])
+    shapes = list(embedding_shape(df).values())
+
+    true = list(pad_data(dic).values())
+
+    for v1, v2 in zip(split_array(array, shapes), true):
+        assert (v1 == v2).all()
+
+    split_array(tab_to_array(dic), shapes)
+
+
+def test_array_to_dict():
+
+    array = np.hstack(seq_to_array(x).reshape(5, -1) for x
+                      in [col1, col2, col3, col4])
+    shapes = embedding_shape(dic)
+
+    result = array_to_dict(array, shapes)
+    true = pad_data(dic)
+
+    for k1, v1, k2, v2 in zip(result.keys(), result.values(),
+                              true.keys(), true.values()):
+        assert (v1 == v2).all()
+        assert k1 == k2
