@@ -1,5 +1,17 @@
 """
 Tools for manipulating data
+
+Operations offered in this module allow to manipulate data with tensors
+of different shapes. When such tensors must be merged (for example to an
+array), the functions first pad each tensor such its shape is equal to the
+embedding shape, which is the smallest shape in which all tensors can fit
+*without flattening*.
+
+Some functions flatten the output. If the input is made of tensors of
+different shapes, the output is in general bigger than the one obtained
+by first flattening, and then applying the function. The reason is that
+flattening before embedding loses the information about the different tensor
+directions.
 """
 
 import numpy as np
@@ -307,3 +319,20 @@ def seq_to_array(data, shape=None):
         return data
     elif isinstance(data, pd.Series):
         return np.stack(data.values)
+
+
+def tab_to_array(data):
+    """
+    Convert a table to an array.
+
+    All columns of the table are first converted to an array, which are then
+    flatten and finally merged together.
+
+    If a values in a column are tensors of different dimensions, then they
+    are padded to reach the embedding shape before merging.
+    """
+
+    # works for both dict and dataframe
+    size = len(data[list(data.keys())[0]])
+
+    return np.hstack([seq_to_array(data[k]).reshape(size, -1) for k in data])

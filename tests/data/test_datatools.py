@@ -5,7 +5,7 @@ import pandas as pd
 
 from mltools.data.datatools import (tensor_name, tensor_dim, data_shapes,
                                     embedding_shape, is_homogeneous, pad_array,
-                                    pad_data, seq_to_array)
+                                    pad_data, seq_to_array, tab_to_array)
 
 
 s = 8
@@ -309,3 +309,12 @@ def test_seq_to_array():
     assert (seq_to_array(pd.Series(col2)) == pad_data(col2)).all()
     assert (seq_to_array(pd.Series(col3)) == pad_data(col3)).all()
     assert (seq_to_array(pd.Series(col4)) == pad_data(col4)).all()
+
+
+def test_tab_to_array():
+
+    assert (tab_to_array(df)
+            == np.hstack(seq_to_array(x).reshape(5, -1) for x
+                         in [col1, col2, col3, col4])).all()
+
+    assert (tab_to_array(dic) == tab_to_array(df)).all()
