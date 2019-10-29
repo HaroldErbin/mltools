@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 
+# TODO: sample based on id
 # TODO: sample with stratification
 # TODO: sample built from several datasets
 

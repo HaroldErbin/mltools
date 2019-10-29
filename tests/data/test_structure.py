@@ -16,11 +16,11 @@ dic['square'] = np.array(dic['square'])
 
 def test_structure_init_feature_dict():
 
-    ds = DataStructure({'id': 'integer', 'number': 'scalar',
+    ds = DataStructure({'id': 'scalar', 'number': 'scalar',
                         'square': (2, 2)})
 
     assert ds.features == ['id', 'number', 'square']
-    assert ds.types == {'id': 'integer', 'number': 'scalar',
+    assert ds.types == {'id': 'scalar', 'number': 'scalar',
                         'square': 'matrix'}
     assert ds.shapes == {'square': (2, 2, 1)}
 
@@ -39,7 +39,7 @@ def test_structure_init_feature_infer():
     ds = DataStructure(['id', 'number', 'square'], infer=df)
 
     assert ds.features == ['id', 'number', 'square']
-    assert ds.types == {'id': 'integer', 'number': 'scalar',
+    assert ds.types == {'id': 'scalar', 'number': 'scalar',
                         'square': 'matrix'}
     assert ds.shapes == {'square': (2, 2, 1)}
 
@@ -50,6 +50,6 @@ def test_structure_init_feature_channels():
                        with_channels=['square'])
 
     assert ds.features == ['id', 'number', 'square']
-    assert ds.types == {'id': 'integer', 'number': 'scalar',
+    assert ds.types == {'id': 'scalar', 'number': 'scalar',
                         'square': 'vector'}
     assert ds.shapes == {'square': (2, 2)}

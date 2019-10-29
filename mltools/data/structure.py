@@ -10,8 +10,13 @@ are used: scalar (0d tensor), vector (1d tensor), matrix (2d tensor). By
 default, tensors are considered to have no channels and will be reshaped by
 adding a `1` at the end.
 
+The interpretation of the data is not important: the goal of this class is
+to convert the data in a form which can be used by the algorithms,
+and then back to the original format. The interpretation (converting a
+categorical feature to one-hot-encoding, extracting the predictions, etc.)
+is done by other classes or functions.
+
 The data structure can present the data according to 4 modes:
-- merged: all objects are merged in the biggest possible tensor
 - flat: all objects are merged in a single 1d array
 - type: all objects of a type are merged in a single array
 - col: by column name
@@ -33,12 +38,11 @@ from . import datatools
 # TODO: for muli-label, write as tuple of features
 
 # transformation modes
-_MODES = ['col', 'type', 'merged', 'flat']
+_MODES = ['col', 'type', 'flat']
 
 # supported types
-_TYPES = ['integer', 'scalar']
-# future: bool, int, vector, matrix, 3-tensor, text, image, video
-#         different types of classification
+_TYPES = ['scalar', 'vector', 'matrix', 'tensor']
+# future: text, image, video, graph
 
 _TENSOR_ALIAS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
                  'tensor_2d': 'matrix'}
@@ -170,9 +174,9 @@ class DataStructure:
 
                 # for dataframe only: infer[f].dtype
                 if f not in self.types:
-                    if np.issubdtype(type(first), np.integer):
-                        self.types[f] = 'integer'
-                    elif np.issubdtype(type(first), np.floating):
+                    if (np.issubdtype(type(first), np.integer)
+                            or np.issubdtype(type(first), np.floating)):
+#                        self.types[f] = 'integer'
                         self.types[f] = 'scalar'
                     elif isinstance(first, (np.ndarray, list, tuple)):
                         self.types[f] = 'tensor_{}d'.format(len(shape) - 1)
@@ -209,6 +213,9 @@ class DataStructure:
         # default mode
         self.mode = mode
 
+        if mode == 'type':
+            raise NotImplementedError
+
         # scaling: None, minmax, std
         if scaling is not None:
             raise NotImplementedError
@@ -230,11 +237,17 @@ class DataStructure:
 
     def transform(self, X, mode=None):
 
+        if mode == 'type':
+            raise NotImplementedError
+
         mode = mode or self.mode
 
         pass
 
     def inverse_transform(self, y, mode=None):
+
+        if mode == 'type':
+            raise NotImplementedError
 
         mode = mode or self.mode
 

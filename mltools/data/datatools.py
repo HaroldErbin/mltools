@@ -22,6 +22,9 @@ _LOW_TENSORS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
                 'tensor_2d': 'matrix'}
 
 
+# TODO: merge arrays on channels (last dimension)
+
+
 def tensor_name(dim, channels=False):
     """
     Tensor name from its dimension.
