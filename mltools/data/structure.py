@@ -82,7 +82,7 @@ class DataStructure:
 
         The class will determine the types according according to the
         following steps (by increasing priority):
-        1. default to scalar
+        1. default to scalar with one channel
         2. inference from the argument `infer` (usually a dataframe)
         3. if `features` is a dict, then the values indicated
         4. the key in `datatypes` under which the feature appears
@@ -147,6 +147,8 @@ class DataStructure:
             if isinstance(datatypes, dict):
                 self.features += list(features.keys())
 
+        # TODO: refactor: for each representation, write special method
+
         if isinstance(features, dict):
             for f, v in features.items():
                 # if the value is a shape, then the type must be a tensor
@@ -157,6 +159,10 @@ class DataStructure:
                     self.shapes[f] = shape
                 elif isinstance(v, str):
                     self.types[f] = v
+                    if v == 'scalar':
+                        self.shapes[f] = (1,)
+                elif v is None:
+                    pass
                 else:
                     raise ValueError("`{}` type not usable.".format(type(v)))
 
@@ -178,6 +184,7 @@ class DataStructure:
                             or np.issubdtype(type(first), np.floating)):
 #                        self.types[f] = 'integer'
                         self.types[f] = 'scalar'
+                        self.shapes[f] = (1,)
                     elif isinstance(first, (np.ndarray, list, tuple)):
                         self.types[f] = 'tensor_{}d'.format(len(shape) - 1)
                         self.shapes[f] = shape
@@ -199,6 +206,7 @@ class DataStructure:
         missing_types = {f: "scalar" for f in self.features
                          if f not in self.types}
         self.types.update(missing_types)
+        self.shapes.update({f: (1,) for f in missing_types})
 
         for f in self.features:
             if f not in self.types:
@@ -227,6 +235,7 @@ class DataStructure:
 
         if self.pipeline is not None:
             raise NotImplementedError
+
 
     def __repr__(self):
         return "<DataStructure: {}>".format(list(self.types.keys()))
