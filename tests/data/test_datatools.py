@@ -316,8 +316,8 @@ def test_seq_to_array():
 def test_tab_to_array():
 
     assert (tab_to_array(df)
-            == np.hstack(seq_to_array(x).reshape(5, -1) for x
-                         in [col1, col2, col3, col4])).all()
+            == np.hstack([seq_to_array(x).reshape(5, -1) for x
+                          in [col1, col2, col3, col4]])).all()
 
     assert (tab_to_array(dic) == tab_to_array(df)).all()
 
@@ -354,8 +354,8 @@ def test_linear_indices():
 
 def test_split_array():
 
-    array = np.hstack(seq_to_array(x).reshape(5, -1) for x
-                      in [col1, col2, col3, col4])
+    array = np.hstack([seq_to_array(x).reshape(5, -1) for x
+                       in [col1, col2, col3, col4]])
     shapes = list(embedding_shape(df).values())
 
     true = list(pad_data(dic).values())
@@ -368,8 +368,8 @@ def test_split_array():
 
 def test_array_to_dict():
 
-    array = np.hstack(seq_to_array(x).reshape(5, -1) for x
-                      in [col1, col2, col3, col4])
+    array = np.hstack([seq_to_array(x).reshape(5, -1) for x
+                       in [col1, col2, col3, col4]])
     shapes = embedding_shape(dic)
 
     result = array_to_dict(array, shapes)
