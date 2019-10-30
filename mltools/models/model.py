@@ -43,7 +43,7 @@ class Model:
             raise TypeError(error.format(type(inputs)))
 
         if (outputs is not None
-                and not isinstance(outputs, (None, Pipeline, DataStructure))):
+                and not isinstance(outputs, (Pipeline, DataStructure))):
 
             error = ("`outputs` can only be None, a Pipeline "
                      "or a DataStructure, not `{}`.")
@@ -60,10 +60,27 @@ class Model:
     def __repr__(self):
         return '<%s>' % str(self)
 
-    def fit(self, X, y):
+    def fit(self, X, y=None):
+
+        if y is None:
+            y = X
+
+        if self.inputs is not None:
+            X = self.inputs(X, mode='flat')
+        if self.outputs is not None:
+            print(y)
+            y = self.outputs(y, mode='flat')
 
         return self.model.fit(X, y)
 
     def predict(self, X):
 
-        return self.model.predict(X)
+        if self.inputs is not None:
+            X = self.inputs(X, mode='flat')
+
+        y = self.model.predict(X)
+
+        if self.outputs is not None:
+            y = self.outputs.inverse_transform(y)
+
+        return y
