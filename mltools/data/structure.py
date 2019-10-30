@@ -236,9 +236,12 @@ class DataStructure:
         if self.pipeline is not None:
             raise NotImplementedError
 
-
     def __repr__(self):
         return "<DataStructure: {}>".format(list(self.types.keys()))
+
+    def __call__(self, X, mode=None):
+
+        return self.transform(X, mode)
 
     def fit(self, X, y):
 
@@ -246,18 +249,50 @@ class DataStructure:
 
     def transform(self, X, mode=None):
 
-        if mode == 'type':
-            raise NotImplementedError
-
-        mode = mode or self.mode
-
-        pass
-
-    def inverse_transform(self, y, mode=None):
+        # TODO: X can be a list of tables, with non-overlapping columns
+        # useful if data are stored in different ways (images, etc.)
 
         if mode == 'type':
             raise NotImplementedError
 
         mode = mode or self.mode
 
-        pass
+        if mode == 'flat':
+            return self.transform_flat(X)
+        elif mode == 'col':
+            return self.transform_col(X)
+        else:
+            raise ValueError("No mode `{}` available.".format(mode))
+
+    def transform_flat(self, X):
+        return datatools.tab_to_array(self.transform_col(X))
+
+    def transform_col(self, X):
+        if isinstance(X, (dict, pd.DataFrame)):
+            if isinstance(X, dict):
+                X = {k: v for k, v in X.items() if k in self.features}
+            elif isinstance(X, pd.DataFrame):
+                X = X[self.features]
+            else:
+                raise NotImplementedError
+
+            return datatools.pad_data(X, self.shapes)
+
+    def inverse_transform(self, y):
+        if isinstance(y, dict):
+            return self.inverse_transform_col(y)
+        elif isinstance(y, np.ndarray):
+            return self.inverse_transform_flat(y)
+        else:
+            raise NotImplementedError
+
+    def inverse_transform_flat(self, y):
+        return self.inverse_transform_col(datatools
+                                          .array_to_dict(y, self.shapes))
+
+    def inverse_transform_col(self, y):
+        for k, v in y.items():
+            shape = v.shape if k in self.with_channels else v.shape[:-1]
+            y[k] = v.reshape(*shape)
+
+        return y
