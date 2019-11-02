@@ -9,6 +9,8 @@ from ..data.structure import DataStructure
 
 
 # TODO: a model can be passed a DataStructure or a Pipeline
+# TODO: method to create new model with different parameters from existing
+#      (keep inputs/outputs)
 
 
 class Model:
@@ -23,7 +25,7 @@ class Model:
     the models are also compatible as a part of a pipeline.
     """
 
-    def __init__(self, inputs=None, outputs=None, name=""):
+    def __init__(self, inputs=None, outputs=None, model_params=None, name=""):
         """
         :param inputs: how input data to the various function should be
             converted before feeding to the model
@@ -32,6 +34,11 @@ class Model:
             converted before feeding to the model
         :type outputs: `DataStructure` or `Pipeline`
         """
+
+        self.model = None
+
+        if model_params is None:
+            self.model_params = {}
 
         self.name = name or 'Model {}'.format(hex(id(self)))
 
@@ -52,13 +59,14 @@ class Model:
         self.inputs = inputs
         self.outputs = outputs
 
-        self.model = None
-
     def __str__(self):
         return self.name
 
     def __repr__(self):
-        return '<%s>' % str(self)
+        if self.model_params == {}:
+            return '<{}>'.format(str(self))
+        else:
+            return '<{}: {}>'.format(str(self), self.model_params)
 
     def fit(self, X, y=None):
 
@@ -68,7 +76,6 @@ class Model:
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
         if self.outputs is not None:
-            print(y)
             y = self.outputs(y, mode='flat')
 
         return self.model.fit(X, y)
@@ -84,3 +91,16 @@ class Model:
             y = self.outputs.inverse_transform(y)
 
         return y
+
+#    def create_model(self, **model_params):
+#        self.model(**model_params)
+
+    def save_model(self, file):
+        # save weights
+        # save parameters (name...)
+
+        raise NotImplementedError
+
+    def load_model(self, file):
+
+        raise NotImplementedError
