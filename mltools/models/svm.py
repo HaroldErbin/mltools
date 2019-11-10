@@ -12,7 +12,7 @@ class SVM(Model):
 
         Model.__init__(self, inputs, outputs, model_params)
 
-        # dfault arguments
+        # default arguments
         if "kernel" not in self.model_params:
             self.model_params["kernel"] = "linear"
 
@@ -35,7 +35,7 @@ class SVM(Model):
         else:
             raise ValueError("Method `%s` not permitted." % method)
 
-        default_name = "SVM({}) {}".format(self.method, hex(id(self)))
+        default_name = "SVM ({}) {}".format(self.method, hex(id(self)))
         self.name = name or default_name
 
     def fit(self, X, y=None):

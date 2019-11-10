@@ -24,6 +24,8 @@ _LOW_TENSORS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
 
 # TODO: merge arrays on channels (last dimension)
 
+# TODO: functions to combine or update dataframes (argument may be dict)
+
 
 def tensor_name(dim, channels=False):
     """
@@ -424,6 +426,8 @@ def split_array(array, shapes):
         raise ValueError("This function works only with matrix.")
 
     target_dim = linear_shape(shapes, True)
+
+    # TODO: fails if algorithm return 1d array (e.g. tree)
     dim = array.shape[1]
 
     if target_dim > dim:
