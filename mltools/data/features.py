@@ -2,7 +2,9 @@
 Generate new features.
 """
 
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+import pandas as pd
+
+from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 
 
 class CategoricalFeatures:
@@ -22,12 +24,21 @@ class CategoricalFeatures:
         self.features = self.categories
         self.encoders = {}
 
+    def fit(self, data):
+        raise NotImplementedError
+
+    def transform(self, data):
+        raise NotImplementedError
+
+    def fit_transform(self, data):
+        raise NotImplementedError
+
     def fit_category(self, data, mode=None):
 
         # TODO: add possibility to restrict modes (to avoid creating too
         #       much data)
 
-        if mode is not None and mode not in ["ord", "ordinal", "one-hot"]:
+        if mode is not None and mode not in ["ord", "ordinal", "onehot"]:
             raise ValueError("Mode `{}` does not exist.".format(mode))
 
         for f in self.categories:
@@ -37,10 +48,10 @@ class CategoricalFeatures:
 
             # ordinal
             enc = LabelEncoder()
-            enc.fit(data[f].values)
+            enc.fit(data[f])
             self.encoders[f]["ord"] = enc
 
-            enc = OneHotEncoder()
+            enc = LabelBinarizer()
             enc.fit(data[f])
             self.encoders[f]["onehot"] = enc
 
@@ -49,13 +60,18 @@ class CategoricalFeatures:
         # TODO: add possibility to restrict modes (to avoid creating too
         #       much data)
 
-        if mode is not None and mode not in ["ord", "ordinal", "one-hot"]:
+        if mode is not None and mode not in ["ord", "ordinal", "onehot"]:
             raise ValueError("Mode `{}` does not exist.".format(mode))
 
         new = {}
 
         for f in self.categories:
             new[f + "_ord"] = self.encoders[f]["ord"].transform(data[f])
-            new[f + "_onehot"] = self.encoders[f]["ord"].transform(data[f])
+            new[f + "_onehot"] = self.encoders[f]["onehot"].transform(data[f])
 
         return new
+
+    def update_dataframe(self, data):
+        new = self.make_category(data)
+
+        return data.join(pd.DataFrame({k: list(v) for k, v in new.items()}))
