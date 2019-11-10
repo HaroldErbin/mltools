@@ -39,6 +39,8 @@ class Model:
 
         if model_params is None:
             self.model_params = {}
+        else:
+            self.model_params = model_params
 
         self.name = name or 'Model {}'.format(hex(id(self)))
 
