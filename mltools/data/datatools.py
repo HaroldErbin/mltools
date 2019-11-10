@@ -86,12 +86,14 @@ def data_shapes(data):
     :rtype: list(tuple) or dict(str, list(tuple))
     """
 
-    if isinstance(data, np.ndarray):
-        return [np.shape(data)[1:]]
-    elif isinstance(data, (list, tuple)):
-        return sorted(list(set(map(lambda x: np.shape(x), data))))
-    elif isinstance(data, pd.Series):
-        return sorted(list(data.apply(lambda x: np.shape(x)).unique()))
+    # this does not work for array obtained from Series.values
+    # they contain themselves list
+#    if isinstance(data, np.ndarray):
+#        return [np.shape(data)[1:]]
+    if isinstance(data, (list, tuple, np.ndarray, pd.Series)):
+        return sorted(list(set(np.shape(x) for x in data)))
+#    elif isinstance(data, pd.Series):
+#        return sorted(list(data.apply(lambda x: np.shape(x)).unique()))
     elif isinstance(data, dict):
         return {c: data_shapes(d) for c, d in data.items()}
     elif isinstance(data, pd.DataFrame):
@@ -192,17 +194,33 @@ def pad_array(array, shape, value=0.):
 
     array_shape = np.shape(array)
 
-    # take into account the case where array is a scalar
-    if array_shape == ():
-        # if target is also scalar, then return the array
-        if shape == ():
-            return array
+    # necessary if array is list or tuple
+#    if isinstance(array, (list, tuple)) or array.dtype == np.dtype('O'):
+    # TODO: speed problem + break test
+    array = np.array(array)
 
+    # if shapes are identical, do nothing
+    if shape == array_shape:
+        return array
+
+    # take into account the case where array is a scalar
+    # important to do this before all other steps if data is a scalar
+    if array_shape == ():
+        # case array_shape == shape == () is taken care of above
+        # in other cases, change shape of scalar for later use
         array_shape = (1,)
         array = np.array((array,))
 
+        if shape == (1,):
+            return array
+
+    # if difference is only 1 in last dimension, reshape
+    if shape == array_shape + (1,):
+        return array.reshape(*shape)
+
     length_diff = len(shape) - len(array_shape)
 
+    # TODO: should be taken care of by previous cases, but it's not the case
     if shape == (1,) and array_shape == (1,):
         return array
 
@@ -220,7 +238,7 @@ def pad_array(array, shape, value=0.):
     return np.pad(array, padding, mode="constant", constant_values=value)
 
 
-def pad_data(data, shape=None, value=0.):
+def pad_data(data, shape=None, value=0., toarray=False):
     """
     Pad all samples of the data to a common shape.
 
@@ -258,6 +276,9 @@ def pad_data(data, shape=None, value=0.):
         if isinstance(shape, dict):
             raise ValueError("`shape` cannot be a dict if the data is a "
                              "sequence.")
+
+        if toarray is True:
+            data = np.array(data)
     elif isinstance(data, (dict, pd.DataFrame)):
         # if the shape is a tuple and the data a table, then write a dict
         # where the same shape is used for all columns
@@ -266,14 +287,23 @@ def pad_data(data, shape=None, value=0.):
     else:
         raise TypeError("Data type `{}` is not supported.".format(type(data)))
 
-    size = len(data)
+#    size = len(data)
+#    shapes = data_shapes(data)
 
-    if isinstance(data, np.ndarray):
-        return pad_array(data, (size,) + shape, value)
-    elif isinstance(data, (list, tuple)):
+    if isinstance(data, (list, tuple, np.ndarray)):
+#        if len(shapes) > 1 or isinstance(data, (list, tuple)):
         return np.array([pad_array(e, shape, value) for e in data])
+#        else:
+#            return pad_array(data, (size,) + shape, value)
     elif isinstance(data, pd.Series):
-        return data.apply(lambda x: pad_array(x, shape, value))
+#        if is_homogeneous(data):
+#            return pad_array(data.values, (len(data),) + shape, value)
+#        else:
+#        return data.apply(lambda x: pad_array(x, shape, value))
+
+        # TODO: speed
+        return pd.Series([pad_array(x, shape, value) for x in data],
+                         index=data.index)
     elif isinstance(data, dict):
         # copy columns which are not updated
         dic = data.copy()
@@ -281,7 +311,7 @@ def pad_data(data, shape=None, value=0.):
             if c in shape:
                 # compute embedding shape if value is None
                 s = embedding_shape(l) if shape[c] is None else shape[c]
-                dic[c] = pad_data(l, s, value)
+                dic[c] = pad_data(l, s, value, toarray=toarray)
 
         return dic
     elif isinstance(data, pd.DataFrame):
@@ -291,7 +321,7 @@ def pad_data(data, shape=None, value=0.):
             if c in shape:
                 # compute embedding shape if value is None
                 s = embedding_shape(data[c]) if shape[c] is None else shape[c]
-                df[c] = pad_data(data[c], s, value)
+                df[c] = pad_data(data[c], s, value, toarray=toarray)
 
         return df
 
@@ -315,7 +345,10 @@ def seq_to_array(data, shape=None):
     :rtype: array
     """
 
-    data = pad_data(data, shape=None)
+    if isinstance(data, pd.Series):
+        data = data.values
+
+    data = pad_data(data, shape=shape)
 
     if isinstance(data, (tuple, list, np.ndarray)):
         # for a tuple, a list or an array, the pad_data already does everything

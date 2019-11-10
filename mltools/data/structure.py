@@ -276,7 +276,7 @@ class DataStructure:
             else:
                 raise NotImplementedError
 
-            return datatools.pad_data(X, self.shapes)
+            return datatools.pad_data(X, self.shapes, toarray=True)
 
     def inverse_transform(self, y):
         if isinstance(y, dict):
