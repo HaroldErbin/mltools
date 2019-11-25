@@ -24,14 +24,14 @@ class SVM(Model):
             if self.model_params["kernel"] == "linear":
                 self.model = svm.LinearSVC()
             else:
-                self.model = svm.SVC(**model_params)
+                self.model = svm.SVC(**self.model_params)
         elif method in ("reg", "regression"):
             self.method = "regression"
 
             if self.model_params["kernel"] == "linear":
                 self.model = svm.LinearSVR()
             else:
-                self.model = svm.SVR(**model_params)
+                self.model = svm.SVR(**self.model_params)
         else:
             raise ValueError("Method `%s` not permitted." % method)
 

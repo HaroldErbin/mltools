@@ -14,10 +14,10 @@ class DecistionTree(Model):
 
         if method in ("clf", "classif", "classification"):
             self.method = "classification"
-            self.model = tree.DecisionTreeClassifier()
+            self.model = tree.DecisionTreeClassifier(**self.model_params)
         elif method in ("reg", "regression"):
             self.method = "regression"
-            self.model = tree.DecisionTreeRegressor()
+            self.model = tree.DecisionTreeRegressor(**self.model_params)
         else:
             raise ValueError("Method `%s` not permitted." % method)
 
