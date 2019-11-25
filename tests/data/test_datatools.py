@@ -140,19 +140,17 @@ def test_pad_array():
     Test pad_array with default value (zero).
     """
 
+    # scalar
     assert pad_array(s, ()) == s
+    assert pad_array(s, (1,)) == np.array(s)
 
-    assert pad_array(s, (1,)) == s
-
-    assert (pad_array(s, (2,)) == np.array([s, 0])).all()
-    assert (pad_array(s, (2, 2)) == np.array([(s, 0), (0, 0)])).all()
-
+    # vector
     assert (pad_array(v, v.shape) == v).all()
-
     assert (pad_array(v, (6,)) == np.append(v, [0, 0])).all()
     assert (pad_array(v, (6, 2))
             == np.append(v, [0] * 8).reshape(2, 6).T).all()
 
+    # matrix
     assert (pad_array(m, m.shape) == m).all()
 
     assert (pad_array(m, (4, 3)) == np.array([[0, 1, 2], [3, 4, 5],
@@ -164,6 +162,7 @@ def test_pad_array():
                                               [0, 0, 0, 0],
                                               [0, 0, 0, 0]])).all()
 
+    # tensors
     assert (pad_array(t, t.shape) == t).all()
     assert (pad_array(t, (3, 3, 4))
             == np.array([[[ 0,  1,  2,  3], [ 4,  5,  6,  7],
@@ -172,6 +171,11 @@ def test_pad_array():
                           [20, 21, 22, 23]],
                          [[ 0,  0,  0,  0], [ 0,  0,  0,  0],
                           [ 0,  0,  0,  0]]])).all()
+
+    # test with list
+    assert (pad_array(list(v), v.shape) == v).all()
+    assert (pad_array(tuple(v), v.shape) == v).all()
+    assert (pad_array(list(v), (6,)) == np.append(v, [0, 0])).all()
 
 
 def test_pad_array_value():
@@ -191,6 +195,14 @@ def test_pad_array_value():
 
     assert (pad_array(m, (4, 3), 1) == np.array([[0, 1, 2], [3, 4, 5],
                                                  [1, 1, 1], [1, 1, 1]])).all()
+
+
+def test_pad_array_errors():
+    with pytest.raises(ValueError):
+        pad_array(v, ())
+
+    with pytest.raises(ValueError):
+        pad_array(v, (1,))
 
 
 def test_pad_data_array():
@@ -227,9 +239,8 @@ def test_pad_data_list():
 
 def test_pad_data_series():
 
-    # TODO: broken test: lines are 1d array instead of scalars
-#    assert pad_data(pd.Series(col1)).equals(pd.Series(col1))
-#    assert pad_data(pd.Series(col1), ()).equals(pd.Series(col1))
+    assert pad_data(pd.Series(col1)).equals(pd.Series(col1))
+    assert pad_data(pd.Series(col1), ()).equals(pd.Series(col1))
 
     assert (pad_data(pd.Series(col1), (2,)).apply(lambda x: x.tolist())
             .equals(pd.Series([[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]])))
@@ -237,6 +248,13 @@ def test_pad_data_series():
     assert (pad_data(pd.Series(col3)).apply(lambda x: x.tolist())
             .equals(pd.Series([[1, 0, 0], [2, 3, 4], [5, 0, 0],
                                [6, 7, 0], [8, 9, 0]])))
+
+    # test output with attributes `values`
+    assert (pad_data(pd.Series(col1).values)
+            == np.array([0, 1, 2, 3, 4])).all()
+    assert (pad_data(pd.Series(col3).values)
+            == np.array([[1, 0, 0], [2, 3, 4], [5, 0, 0],
+                         [6, 7, 0], [8, 9, 0]])).all()
 
 
 def test_pad_data_dic():
@@ -308,24 +326,75 @@ def test_pad_data_dataframe_col():
 
 def test_seq_to_array():
 
+    assert (seq_to_array(v) == v).all()
+
     assert (seq_to_array(col1) == pad_data(col1)).all()
     assert (seq_to_array(col2) == pad_data(col2)).all()
-    assert (seq_to_array(col3) == pad_data(col3)).all()
-    assert (seq_to_array(col4) == pad_data(col4)).all()
 
     assert (seq_to_array(pd.Series(col1)) == pad_data(col1)).all()
     assert (seq_to_array(pd.Series(col2)) == pad_data(col2)).all()
-    assert (seq_to_array(pd.Series(col3)) == pad_data(col3)).all()
-    assert (seq_to_array(pd.Series(col4)) == pad_data(col4)).all()
+
+    # use padding before
+    assert (seq_to_array(pad_data(col3)) == pad_data(col3)).all()
+    assert (seq_to_array(pad_data(col4)) == pad_data(col4)).all()
+
+    assert (seq_to_array(pad_data(pd.Series(col3))) == pad_data(col3)).all()
+
+
+def test_seq_to_array_errors():
+    with pytest.raises(ValueError):
+        seq_to_array(col3)
+
+    with pytest.raises(ValueError):
+        seq_to_array(pd.Series(col3))
 
 
 def test_tab_to_array():
 
-    assert (tab_to_array(df)
-            == np.hstack([seq_to_array(x).reshape(5, -1) for x
-                          in [col1, col2, col3, col4]])).all()
+    res12 = {k: seq_to_array(v) for k, v
+             in zip(["col1", "col2"], [col1, col2])}
+    res1234 = {k: seq_to_array(pad_data(v)) for k, v
+               in zip(["col1", "col2", "col3", "col4"],
+                      [col1, col2, col3, col4])}
 
-    assert (tab_to_array(dic) == tab_to_array(df)).all()
+    for v1, v2 in zip(tab_to_array(df[["col1", "col2"]]), res12):
+        assert v1 == v2
+
+    for v1, v2 in zip(tab_to_array({k: v for k, v in dic.items()
+                                    if k in ["col1", "col2"]}), res12):
+        assert v1 == v2
+
+    # use padding before
+    for v1, v2 in zip(tab_to_array(pad_data(df)), res1234):
+        assert v1 == v2
+
+    for v1, v2 in zip(tab_to_array(pad_data(dic)), res1234):
+        assert v1 == v2
+
+
+def test_tab_to_array_flatten():
+
+    res12 = np.hstack([seq_to_array(x).reshape(5, -1) for x in [col1, col2]])
+    res1234 = np.hstack([seq_to_array(pad_data(x)).reshape(5, -1) for x
+                         in [col1, col2, col3, col4]])
+
+    assert (tab_to_array(df[["col1", "col2"]], flatten=True) == res12).all()
+
+    assert (tab_to_array({k: v for k, v in dic.items()
+                          if k in ["col1", "col2"]}, flatten=True)
+            == res12).all()
+
+    # use padding before
+    assert (tab_to_array(pad_data(df), flatten=True) == res1234).all()
+    assert (tab_to_array(pad_data(dic), flatten=True) == res1234).all()
+
+
+def test_tab_to_array_errors():
+    with pytest.raises(ValueError):
+        tab_to_array(df)
+
+    with pytest.raises(ValueError):
+        tab_to_array(dic)
 
 
 def test_linear_shape():
@@ -360,7 +429,7 @@ def test_linear_indices():
 
 def test_split_array():
 
-    array = np.hstack([seq_to_array(x).reshape(5, -1) for x
+    array = np.hstack([seq_to_array(pad_data(x)).reshape(5, -1) for x
                        in [col1, col2, col3, col4]])
     shapes = list(embedding_shape(df).values())
 
@@ -369,12 +438,14 @@ def test_split_array():
     for v1, v2 in zip(split_array(array, shapes), true):
         assert (v1 == v2).all()
 
-    split_array(tab_to_array(dic), shapes)
+    for v1, v2 in zip(split_array(tab_to_array(pad_data(dic), flatten=True),
+                                  shapes), true):
+        assert (v1 == v2).all()
 
 
 def test_array_to_dict():
 
-    array = np.hstack([seq_to_array(x).reshape(5, -1) for x
+    array = np.hstack([seq_to_array(pad_data(x)).reshape(5, -1) for x
                        in [col1, col2, col3, col4]])
     shapes = embedding_shape(dic)
 

@@ -247,6 +247,17 @@ class DataStructure:
 
         pass
 
+    def data_filter(self, X):
+        if isinstance(X, (dict, pd.DataFrame)):
+            if isinstance(X, dict):
+                X = {k: v for k, v in X.items() if k in self.features}
+            elif isinstance(X, pd.DataFrame):
+                X = X[self.features]
+
+            return X
+        else:
+            raise NotImplementedError
+
     def transform(self, X, mode=None):
 
         # TODO: X can be a list of tables, with non-overlapping columns
@@ -265,18 +276,10 @@ class DataStructure:
             raise ValueError("No mode `{}` available.".format(mode))
 
     def transform_flat(self, X):
-        return datatools.tab_to_array(self.transform_col(X))
+        return datatools.tab_to_array(self.data_filter(X), flatten=True)
 
     def transform_col(self, X):
-        if isinstance(X, (dict, pd.DataFrame)):
-            if isinstance(X, dict):
-                X = {k: v for k, v in X.items() if k in self.features}
-            elif isinstance(X, pd.DataFrame):
-                X = X[self.features]
-            else:
-                raise NotImplementedError
-
-            return datatools.pad_data(X, self.shapes, toarray=True)
+        return datatools.tab_to_array(self.data_filter(X))
 
     def inverse_transform(self, y):
         if isinstance(y, dict):

@@ -178,6 +178,15 @@ def pad_array(array, shape, value=0.):
     example, the components of a vector extended to a matrix will be in the
     first column.
 
+    If the array cannot be embedded in the target shape (for example if the
+    target has less dimensions or if one dimension is smaller), raise an error.
+
+    Contrary to most other functions of this module, this function treats all
+    dimensions on an equal footing.
+
+    This function always convert a list or tuple to an array even when
+    reshapping or padding is not necessary.
+
     :param array: array to pad
     :type array: array
     :param shape: shape of the new array
@@ -196,39 +205,44 @@ def pad_array(array, shape, value=0.):
 
     array_shape = np.shape(array)
 
-    # necessary if array is list or tuple
-#    if isinstance(array, (list, tuple)) or array.dtype == np.dtype('O'):
-    # TODO: speed problem + break test
-    array = np.array(array)
+    if isinstance(array, (list, tuple)):
+        array = np.array(array)
 
     # if shapes are identical, do nothing
     if shape == array_shape:
         return array
 
-    # take into account the case where array is a scalar
-    # important to do this before all other steps if data is a scalar
+    # convert scalar to array to use array methods
+    # do this before all other steps
+    # note: case array_shape == shape == () is taken care of above
     if array_shape == ():
-        # case array_shape == shape == () is taken care of above
-        # in other cases, change shape of scalar for later use
         array_shape = (1,)
         array = np.array((array,))
 
         if shape == (1,):
             return array
 
+    # differences between dimension of array and target
+    length_diff = len(shape) - len(array_shape)
+    dim_diff = [d1 - d2 for d1, d2 in zip(shape, array_shape)]
+
+    # target has less dimensions or one dimension is smaller
+    if length_diff < 0 or True in [d < 0 for d in dim_diff]:
+        raise ValueError("Target shape must be bigger than the array shape. "
+                         "Array has shape {}, target is {}."
+                         .format(array_shape, shape))
+#        return array
+
     # if difference is only 1 in last dimension, reshape
     if shape == array_shape + (1,):
         return array.reshape(*shape)
 
-    length_diff = len(shape) - len(array_shape)
-
     # TODO: should be taken care of by previous cases, but it's not the case
-    if shape == (1,) and array_shape == (1,):
-        return array
+#    if shape == (1,) and array_shape == (1,):
+#        return array
 
-    if length_diff < 0:
-        raise ValueError("Target shape must be bigger than the array shape.")
-    elif length_diff > 0:
+    # match shape length by adding ones to the array shape and reshape
+    if length_diff > 0:
         array_shape += (1,) * length_diff
         array = np.reshape(array, array_shape)
 
@@ -252,10 +266,16 @@ def pad_data(data, shape=None, value=0., toarray=False):
     columns to shapes: in this case, only the columns listed are updated with
     the given shape or with the embedding shape if the value is `None`.
 
-    For a list or an array, the first dimension is ignored (since it lists the
-    different samples.)
+    For list, tuple or array, the first dimension is ignored (since it lists
+    the different samples). A list or a tuple is converted to an array for
+    simplicity.
 
-    A list or a tuple is converted to an array for simplicity.
+    Given a series, the result is the same series with individual element
+    padded. To get an array, pass `series.values` to the function.
+
+    One advantage of this function over `pad_array` is that it is not necessary
+    to provide a target shape. This is useful when applying the function to
+    many elements without having to decide which ones should be padded.
 
     :param data: data to pad
     :type data: list, tuple, array, series, dataframe, dict
@@ -267,6 +287,7 @@ def pad_data(data, shape=None, value=0., toarray=False):
     :return: data padded with the given values
     :rtype: array | dict | dataframe
     """
+    # TODO: remove toarray ?
 
     # if shape is not given, find the embedding shape
     if shape is None:
@@ -328,54 +349,55 @@ def pad_data(data, shape=None, value=0., toarray=False):
         return df
 
 
-def seq_to_array(data, shape=None):
+def seq_to_array(data):
     """
     Transform a sequence to an array.
 
-    This function is useful when the sequence contains tensors, especially
-    of different shapes.
-
-    If the values have different shapes, the data is padded to the embedding
-    shape. The shape can also be enforced.
+    Note that no padding: entries with different shapes will yield an error.
+    This is motivated by performance issues, especially with series.
 
     :param data: data to convert to an array
     :type data: array
-    :param shape: force embedding shape
+    :param shape: shape of the final array
     :type target_shape: tuple
+    :param value: value used for padding
+    :type target_shape: float
 
     :return: original data written as an array
     :rtype: array
     """
 
     if isinstance(data, pd.Series):
-        data = data.values
+        data = np.stack(data.values)
+    elif isinstance(data, (tuple, list)):
+        data = np.stack(data)
 
-    data = pad_data(data, shape=shape)
+    return data
 
-    if isinstance(data, (tuple, list, np.ndarray)):
-        # for a tuple, a list or an array, the pad_data already does everything
+
+def tab_to_array(data, flatten=False):
+    """
+    Convert a table to a dict of arrays or to a flattened array.
+
+    All columns of the table are first converted to an array.
+
+    If flatten is `True`, then all arrays are flatten and merged together.
+    The result is a matrix where first dimension is the number of samples
+    and the second all other dimensions. The latter can be computed with the
+    function `linear_shape`.
+
+    Note that no padding: entries with different shapes will yield an error.
+    """
+
+    data = {k: seq_to_array(data[k]) for k in data}
+
+    if flatten is True:
+        # works for both dict and dataframe
+        size = len(data[list(data.keys())[0]])
+
+        return np.hstack([v.reshape(size, -1) for v in data.values()])
+    else:
         return data
-    elif isinstance(data, pd.Series):
-        return np.stack(data.values)
-
-
-def tab_to_array(data):
-    """
-    Convert a table to an array.
-
-    All columns of the table are first converted to an array, which are then
-    flatten and finally merged together. The result is a matrix where first
-    dimension is the number of samples and the second all other dimensions.
-    The latter can be computed with the function `linear_shape`.
-
-    If a values in a column are tensors of different dimensions, then they
-    are padded to reach the embedding shape before merging.
-    """
-
-    # works for both dict and dataframe
-    size = len(data[list(data.keys())[0]])
-
-    return np.hstack([seq_to_array(data[k]).reshape(size, -1) for k in data])
 
 
 def linear_shape(shape, cum=False):
