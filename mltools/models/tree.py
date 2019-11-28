@@ -12,18 +12,24 @@ class DecistionTree(Model):
 
         self.method = method
 
-        if method in ("clf", "classif", "classification"):
+        if method in ("clf", "classification"):
             self.method = "classification"
-            self.model = tree.DecisionTreeClassifier(**self.model_params)
         elif method in ("reg", "regression"):
             self.method = "regression"
-            self.model = tree.DecisionTreeRegressor(**self.model_params)
         else:
             raise ValueError("Method `%s` not permitted." % method)
+
+        self.model = self.create_model()
 
         default_name = "Decision tree ({}) {}".format(self.method,
                                                       hex(id(self)))
         self.name = name or default_name
+
+    def create_model(self):
+        if self.method == "classification":
+            return tree.DecisionTreeClassifier(**self.model_params)
+        elif self.method == "regression":
+            return tree.DecisionTreeRegressor(**self.model_params)
 
     def predict(self, X):
 

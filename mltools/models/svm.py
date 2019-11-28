@@ -16,27 +16,29 @@ class SVM(Model):
         if "kernel" not in self.model_params:
             self.model_params["kernel"] = "linear"
 
-        self.method = method
-
-        if method in ("clf", "classif", "classification"):
+        if method in ("clf", "classification"):
             self.method = "classification"
-
-            if self.model_params["kernel"] == "linear":
-                self.model = svm.LinearSVC()
-            else:
-                self.model = svm.SVC(**self.model_params)
         elif method in ("reg", "regression"):
             self.method = "regression"
-
-            if self.model_params["kernel"] == "linear":
-                self.model = svm.LinearSVR()
-            else:
-                self.model = svm.SVR(**self.model_params)
         else:
             raise ValueError("Method `%s` not permitted." % method)
 
+        self.model = self.create_model()
+
         default_name = "SVM ({}) {}".format(self.method, hex(id(self)))
         self.name = name or default_name
+
+    def create_model(self):
+        if self.method == "classification":
+            if self.model_params["kernel"] == "linear":
+                return svm.LinearSVC()
+            else:
+                return svm.SVC(**self.model_params)
+        elif self.method == "regression":
+            if self.model_params["kernel"] == "linear":
+                return svm.LinearSVR()
+            else:
+                return svm.SVR(**self.model_params)
 
     def fit(self, X, y=None):
 

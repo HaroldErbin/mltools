@@ -94,8 +94,10 @@ class Model:
 
         return y
 
-#    def create_model(self, **model_params):
-#        self.model(**model_params)
+    def create_model(self):
+        # useful for creating several models (for bagging, cross-validation...)
+
+        raise NotImplementedError
 
     def save_model(self, file):
         # save weights

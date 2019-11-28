@@ -11,4 +11,8 @@ class LinearRegression(Model):
 
         self.name = name or 'LinearRegression {}'.format(hex(id(self)))
 
-        self.model = linear_model.LinearRegression()
+        self.model = self.create_model()
+
+    def create_model(self):
+
+        return linear_model.LinearRegression()

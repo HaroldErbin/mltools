@@ -12,18 +12,24 @@ class RandomForest(Model):
 
         self.method = method
 
-        if method in ("clf", "classif", "classification"):
+        if method in ("clf", "classification"):
             self.method = "classification"
-            self.model = ensemble.RandomForestClassifier(**self.model_params)
         elif method in ("reg", "regression"):
             self.method = "regression"
-            self.model = ensemble.RandomForestRegressor(**self.model_params)
         else:
             raise ValueError("Method `%s` not permitted." % method)
+
+        self.model = self.create_model()
 
         default_name = "Random forest ({}) {}".format(self.method,
                                                       hex(id(self)))
         self.name = name or default_name
+
+    def create_model(self):
+        if self.method == "classification":
+            return ensemble.RandomForestClassifier(**self.model_params)
+        elif self.method == "regression":
+            return ensemble.RandomForestRegressor(**self.model_params)
 
     def fit(self, X, y=None):
 
