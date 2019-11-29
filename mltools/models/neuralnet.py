@@ -12,6 +12,7 @@ Example: for a GAN, the first argument is the complete GAN model,
 the dictionary is made of the generator and discriminator parts.
 """
 
+from tensorflow import keras
 
 from .model import Model
 
@@ -25,43 +26,87 @@ class NeuralNetPredictor():
 
 class NeuralNet(Model):
 
-    def __init__(self, model_fn, model_params=None, train_params=None,
-                 model=None, name=''):
-        self.model_fn = model_fn
-        self.model_params = model_params
-        self.train_params = train_params
+    def __init__(self, model_fn, inputs=None, outputs=None, model_params=None,
+                 name=""):
 
-        # if model is not None: instantiate with it (recover its weights)
+        Model.__init__(self, inputs, outputs, model_params)
+
+        self.model_fn = model_fn
+
+        # dict of models
+        self.submodels = self.create_model()
 
         # model instance
-        self.model = None
-        # dict of models
-        self.submodels = None
+        self.model = self.submodels["model"]
 
-        self.name = name
-
-    def __str__(self):
-        return self.name or ('NeuralNet %s' % hex(id(self)))
-
-    def __repr__(self):
-        return '<%s>' % str(self)
+        default_name = "Neural Network {}".format(hex(id(self)))
+        self.name = name or default_name
 
     def create_model(self):
-        pass
+        return self.model_fn(self.inputs, self.outputs, **self.model_params)
 
-    def get_model(self, model=None, inputs=None, outputs=None):
-        # TODO: if inputs and outputs are not None and a datastructure,
-        # create a NeuralNet instance (for predictions)
-
+    def get_model(self, model=None):
         if model is None:
             return self.model
         else:
             return self.submodels[model]
 
-    def train(self, train_fn=None):
-        # fine-tuned train function (useful for GAN)
-        if train_fn is not None:
-            return train_fn()
+    def fit(self, X, y=None, train_params=None, fit_fn=None):
+        # fit_fn: fine-tuned fit function (useful for GAN)
+
+        # TODO: check model type, if sequential, use flat mode,
+        #   if functional, use col
+
+        if train_params is None:
+            train_params = {}
+
+        if y is None:
+            y = X
+
+        # add tests in the function?
+        X = self.transform_data(X, self.inputs)
+        y = self.transform_data(y, self.outputs)
+
+        # TODO: add method to prefix keys with inputs/outputs/aux, etc.
+
+        return self.model.fit(X, y, **train_params)
+
+    def predict(self, X):
+
+        X = self.transform_data(X, self.inputs)
+
+        y = self.model.predict(X)
+
+        if self.outputs is not None:
+            y = self.outputs.inverse_transform(y)
+
+        return y
+
+    def transform_data(self, data, features):
+        """
+        Prepare data to feed to the network.
+
+        This selects the appropriate transformation mode from the data
+        structure. If the model is sequential and if there is a single feature,
+        it selects the corresponding tensor from the mode `col`. If there
+        are multiple features, it selects the mode `flat`. If the model is
+        functional, then it uses the mode `col` and return the complete
+        `dict.
+        """
+        # features = DataStructure
+
+        if features is None:
+            return data
+
+        if isinstance(self.model, keras.models.Sequential):
+            if len(features) == 1:
+                # single feature -> return tensor data (preserving shape)
+                return list(features(data, mode="col").values())[0]
+            else:
+                # multiple features -> return a matrix
+                return features(data, mode="flat")
+        else:
+            return features(data, mode="col")
 
 
 def deep_model():

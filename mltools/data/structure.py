@@ -49,6 +49,7 @@ _TENSOR_ALIAS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
 
 
 # TODO: check how to ensure that all tensors have a shape
+# TODO: make the DataStructure behave like a list (for loop, in...)
 
 
 class DataStructure:
@@ -237,11 +238,14 @@ class DataStructure:
             raise NotImplementedError
 
     def __repr__(self):
-        return "<DataStructure: {}>".format(list(self.types.keys()))
+        return "<DataStructure: {}>".format(list(self.features))
 
     def __call__(self, X, mode=None):
 
         return self.transform(X, mode)
+
+    def __len__(self):
+        return len(self.features)
 
     def fit(self, X, y):
 
