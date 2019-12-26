@@ -9,6 +9,9 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from mltools.data.structure import DataStructure
+from mltools.models.forest import RandomForest
+
 
 class DataExploration:
     """
@@ -89,6 +92,13 @@ class DataExploration:
 
         data.hist(bins=bins, figsize=figsize)
 
+    def scatter_plots(self, data, inputs=None, outputs=None):
+
+        pass
+
+#        data.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
+#        pd.plotting.scatter_matrix(data)
+
     @staticmethod
     def _corr_text(corr, xlabels, ylabels=None):
 
@@ -102,7 +112,7 @@ class DataExploration:
             c = corr[x][ylabels]
             mat.append(c.values)
 
-            text += "- Correlation: {}\n\n".format(x)
+            text += "- Correlations for: {}\n\n".format(x)
             for k, v in c.sort_values(ascending=False).iteritems():
                 text += "{:<25} {:<+.3f}\n".format(k, v)
             text += "\n"
@@ -180,15 +190,55 @@ class DataExploration:
 
         return text, fig
 
-    def scatter_plots(self, data, inputs=None, outputs=None):
+    def importances(self, data, inputs=None, outputs=None, filename="",
+                    logtime=False):
+        """
+        Compute input importances for outputs from random forest.
 
-        pass
+        Filename must have no extension.
+        """
 
-#        data.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
-#        pd.plotting.scatter_matrix(data)
+        # TODO: generalize to vector/matrix inputs (sum importances)
+        # TODO: generalize when some inputs are categories
+        # TODO: try to generalize when outputs is not a scalar
 
-    def feature_importance(self, data, inputs=None, outputs=None):
-        pass
+        # TODO: improve plot display
+
+        importances = {}
+        text = ""
+        figs = []
+
+        struct = DataStructure(inputs, infer=data)
+
+        for o in outputs:
+            model = RandomForest(inputs=struct, outputs=DataStructure([o]),
+                                 method="reg")
+            model.fit(data)
+
+            importances[o] = model.model.feature_importances_
+
+            text += "- Importances for: {}\n\n".format(o)
+            for k, v in zip(inputs, importances[o]):
+                text += "{:<25} {:<+.3f}\n".format(k, v)
+            text += "\n"
+
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+            ax.plot(importances[o])
+
+            ax.set_xticks(np.arange(len(inputs)))
+            ax.set_xticklabels(inputs, rotation=45)
+            ax.set_ylabel("Importance for: {}".format(o))
+            ax.set_ylim(ymin=0, ymax=1)
+
+            figs.append(fig)
+
+        if self.logger is not None:
+            self.logger.save_text(text, filename + ".txt", logtime)
+            self.logger.save_figs(figs, filename + ".pdf", logtime)
+
+        return importances, text, figs
 
     def baseline(self, data, inputs=None, outputs=None, models=None):
         # if model is None, run: linear regression, SVM, basic neural network
@@ -219,6 +269,11 @@ class DataExploration:
         text = "# Correlations between inputs and outputs\n\n" + text
         fulltext += text
         figs += [self.logger.text_to_fig(text), fig]
+
+        _, text, fig = self.importances(data, inputs, outputs)
+        text = "# Input importance for outputs\n\n" + text
+        fulltext += text
+        figs += [self.logger.text_to_fig(text)] + fig
 
         if display_text is True:
             print(fulltext)
