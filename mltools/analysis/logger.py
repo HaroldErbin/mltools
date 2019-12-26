@@ -131,7 +131,7 @@ class Logger:
 
         return filepath
 
-    def savefig(self, fig=None, filename="", logtime=True, dpi=300):
+    def save_fig(self, fig=None, filename="", logtime=True, dpi=300):
         """
         Save figure
 
@@ -150,16 +150,14 @@ class Logger:
         if filename == "":
             return
 
-        filename = self.expandpath(filename)
+        filename = self.expandpath(filename, logtime)
 
         if fig is None:
             fig = plt.getgcf()
 
         fig.savefig(filename, dpi=dpi, bbox_inches='tight')
 
-        return fig
-
-    def savefigs(self, figs, filename="", logtime=True, dpi=300):
+    def save_figs(self, figs, filename="", logtime=True, dpi=300):
         """
         Save several figures
 
@@ -174,11 +172,21 @@ class Logger:
         if filename == "":
             return
 
-        filename = self.expandpath(filename)
+        filename = self.expandpath(filename, logtime)
 
         with PdfPages(filename) as pdf:
             for fig in figs:
                 pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
+
+    def save_text(self, text, filename="", logtime=True):
+
+        if filename == "":
+            return
+
+        filename = self.expandpath(filename, logtime)
+
+        with open(filename, 'w') as f:
+            f.write(text)
 
     def text_to_fig(self, text, filename="", logtime=True):
         """
@@ -194,14 +202,15 @@ class Logger:
         Returns:
             fig (figure): figure containing the text.
         """
+
         fig, ax = plt.subplots()
 
-        ax.text(0, 1, text, size=12, horizontalalignment='center',
-                verticalalignment='center')
+        # size=12
+        ax.text(0, 1, text, fontfamily='monospace', verticalalignment='center')
         ax.set_axis_off()
         # fig.tight_layout(pad=0., w_pad=0., h_pad=0.)
 
-        self.savefig(fig, filename=filename, logtime=logtime)
+        self.save_fig(fig, filename=filename, logtime=logtime)
 
         return fig
 
@@ -212,6 +221,8 @@ class Logger:
 
         If `text` is not empty, then the list is added to the latter.
         """
+
+        # TODO: instead of list save as table (with tab between columns)
 
         if text != "":
             text += "\n"
