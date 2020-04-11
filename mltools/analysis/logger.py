@@ -14,6 +14,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 # import seaborn as sns
 
 
+# TODO: prevent display of graphs
+
 # TODO: custom plot method: take logger instance as argument
 
 
@@ -41,6 +43,14 @@ class Logger:
     Attributes:
         logtime (str): time at which the class
     """
+
+    styles = {
+        "color:original": "blue",
+        "color:predictions": "green",
+        "color:training": "blue",
+        "color:validation": "green",
+        "color:test": "purple"
+    }
 
     def __init__(self, path="", logtime="folder",
                  logtime_fmt="%Y-%m-%d-%H%M%S"):

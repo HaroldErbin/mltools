@@ -12,6 +12,12 @@ from ..data.structure import DataStructure
 # TODO: method to create new model with different parameters from existing
 #      (keep inputs/outputs)
 
+# TODO: pass parameters n (default n=1):
+#   - if validation set, train n models
+#   - else, train with cross-validation
+#   then, return all results
+#   question: compute mean and std here or in predictions?
+
 
 class Model:
     """
