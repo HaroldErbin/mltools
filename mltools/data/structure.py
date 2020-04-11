@@ -104,6 +104,8 @@ class DataStructure:
         :type infer: dataframe, dict(str, array)
         """
 
+        # TODO: the argument `shapes` is not used
+
         if infer is not None:
             if isinstance(infer, dict):
                 infer_cols = list(infer.keys())
@@ -124,6 +126,32 @@ class DataStructure:
                                 "{} found.".format(type(with_channels)))
 
             self.with_channels = with_channels
+
+        self._extract_features_types_shapes(features, datatypes, infer,
+                                            infer_cols)
+
+        # default mode
+        self.mode = mode
+
+        if mode == 'type':
+            raise NotImplementedError
+
+        # scaling: None, minmax, std
+        if scaling is not None:
+            raise NotImplementedError
+
+        # pass data through scikit pipeline before fit or transformation
+        # implemented by the class
+        # TODO: consider more general method/function
+        self.pipeline = pipeline
+
+        if self.pipeline is not None:
+            raise NotImplementedError
+
+    def _extract_features_types_shapes(self, features, datatypes, infer,
+                                       infer_cols):
+
+        # TODO: make this function independent from class?
 
         def add_channel_dim(shape, feature):
             shape = tuple(shape)
@@ -183,7 +211,7 @@ class DataStructure:
                 if f not in self.types:
                     if (np.issubdtype(type(first), np.integer)
                             or np.issubdtype(type(first), np.floating)):
-#                        self.types[f] = 'integer'
+                        # self.types[f] = 'integer'
                         self.types[f] = 'scalar'
                         self.shapes[f] = (1,)
                     elif isinstance(first, (np.ndarray, list, tuple)):
@@ -218,24 +246,6 @@ class DataStructure:
                     and f not in self.shapes):
                 raise ValueError("The feature `{}` is a tensor without shape."
                                  .format(f))
-
-        # default mode
-        self.mode = mode
-
-        if mode == 'type':
-            raise NotImplementedError
-
-        # scaling: None, minmax, std
-        if scaling is not None:
-            raise NotImplementedError
-
-        # pass data through scikit pipeline before fit or transformation
-        # implemented by the class
-        # TODO: consider more general method/function
-        self.pipeline = pipeline
-
-        if self.pipeline is not None:
-            raise NotImplementedError
 
     def __repr__(self):
         return "<DataStructure: {}>".format(list(self.features))
