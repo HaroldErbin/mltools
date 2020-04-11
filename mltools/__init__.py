@@ -10,3 +10,4 @@ from .models.forest import RandomForest
 from .models.neuralnet import NeuralNet
 
 from .analysis.logger import Logger
+from .analysis.predictions import Predictions
