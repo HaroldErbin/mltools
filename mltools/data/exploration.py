@@ -285,20 +285,31 @@ class DataExploration:
             self.logger.save_figs(figs, filename + ".pdf", logtime)
             self.logger.save_text(fulltext, filename + ".txt", logtime)
 
-    def summary(self, data, features=None, display_text=False,
-                display_fig=False, filename=None):
+    def summary(self, data, features=None, extra_text="", extra_figs=None,
+                display_text=False, display_fig=False,
+                filename="", logtime=False):
 
-        text = ""
+        fulltext = ""
+        figs = []
 
-        text += "# Dataset informations\n"
-        text += self.info(data, features)
-        text += "\n"
+        fulltext += "# Dataset informations\n"
+        fulltext += self.info(data, features)
+        fulltext += "\n"
 
-        text += "# Dataset statistics (numerical)"
-        text += self.describe(data, features)
+        fulltext += "# Dataset statistics (numerical)"
+        fulltext += self.describe(data, features)
 
         self.distribution(data, features, bins=50, figsize=(10, 10))
         print()
 
         self.correlations(data, features)
         print()
+
+        fulltext += extra_text
+
+        if extra_figs is not None:
+            figs += extra_figs
+
+        if self.logger is not None:
+            self.logger.save_figs(figs, filename + ".pdf", logtime)
+            self.logger.save_text(fulltext, filename + ".txt", logtime)
