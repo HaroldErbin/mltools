@@ -8,7 +8,9 @@ argument to the functions displaying or saving results.
 
 import os
 import time
+import csv
 
+import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -28,7 +30,11 @@ STYLES = {"color:true": "tab:blue",
           "color:test": "tab:purple",
           "color:errors": "tab:blue",
           "label:true": "true",
-          "label:pred": "pred"
+          "label:pred": "pred",
+          "print:float": "{:.4f}",
+          "print:percent": "{:.2%}",
+          "save:float": "% .5g"
+          # "logtime": '-%Y-%m-%d-%H%M%S'
           }
 
 
@@ -210,6 +216,37 @@ class Logger:
 
         with open(filename, 'w') as f:
             f.write(text)
+
+    def save_csv(self, data, sep='\t', float_fmt=None, filename="", logtime=True):
+        """
+        Save data in CSV file.
+
+        For dict and dataframe, use Pandas' method. Float are formatted
+        according to the format given in `float_fmt` or in the styles dict.
+        To keep all the digits, set the value in `styles` to None.
+
+        If data is a list or a tuple, this calls the standard csv module
+        without any formatting.
+        """
+
+        if filename == "":
+            return
+
+        filename = self.expandpath(filename, logtime)
+
+        float_fmt = float_fmt or self.styles["save:float"]
+
+        if isinstance(data, dict):
+            data = pd.DataFrame(data)
+
+        if isinstance(data, pd.DataFrame):
+            data.to_csv(filename, sep=sep, float_format=float_fmt)
+        elif isinstance(data, (tuple, list)):
+            with open(filename, 'w') as f:
+                csv.writer(f).writerows(data)
+        else:
+            raise TypeError("Data with type `{}` cannot be saved to csv."
+                            .format(type(data)))
 
     def text_to_fig(self, text, filename="", logtime=True):
         """

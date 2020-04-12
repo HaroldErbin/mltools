@@ -101,6 +101,8 @@ class Predictions:
         else:
             self.X = X
 
+        # TODO: sort X and y by id if defined?
+
         # TODO: add this
         # self.y_std = y_std
 
@@ -127,14 +129,13 @@ class Predictions:
         self._process_predictions()
 
         # compute errors
+        if self.y_true is not None:
+            self.errors = self._compute_errors()
+            self.rel_errors = self._compute_relative_errors()
 
         # TODO: how to handle tensors?
         #   first convert with datastructure to dict? (to work on array)
         #   add other measures of errors for vectord (l-norm)
-
-        if self.y_true is not None:
-            self.errors = self._compute_errors()
-            self.rel_errors = self._compute_relative_errors()
 
     def _compute_errors(self):
         if self.y_true is None:
@@ -176,7 +177,7 @@ class Predictions:
     def __getitem__(self, key):
         return self.see_feature(key)
 
-    def see_feature(self, feature, fmt=None):
+    def see_feature(self, feature, fmt=None, filename="", logtime=True):
         """
         Summarize feature results in one dataframe.
 
@@ -199,10 +200,18 @@ class Predictions:
 
         fmt = fmt or self.fmt
 
+        df = pd.DataFrame(dic)
+
+        if self.id is not None:
+            df = df.set_index("id").sort_values(by=['id'])
+
+        if self.logger is not None:
+            self.logger.save_csv(df, filename=filename, logtime=logtime)
+
         if fmt == "dataframe":
             # beter to set index if present?
             # return pd.DataFrame(dic).set_index("id")
-            return pd.DataFrame(dic)
+            return df
         else:
             return dic
 
@@ -233,8 +242,8 @@ class Predictions:
 
         ax.hist([pred, true], linewidth=1., histtype='step', bins=bins,
                 density=density, log=log,
-                label=[styles["label:true"], styles["label:pred"]],
-                color=[styles["color:true"], styles["color:pred"]])
+                label=[styles["label:pred"], styles["label:true"]],
+                color=[styles["color:pred"], styles["color:true"]])
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -302,10 +311,3 @@ class Predictions:
             self.logger.save_fig(fig, filename, logtime)
 
         return fig
-
-    def save_feature(self, filename="", logtime=True):
-
-        # TODO: csv, json (+gz)
-        # sort columns like in see_feature
-
-        pass
