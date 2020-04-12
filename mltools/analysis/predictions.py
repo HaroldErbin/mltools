@@ -3,6 +3,9 @@
 import pandas as pd
 import numpy as np
 
+import matplotlib.pyplot as plt
+
+from mltools.analysis.logger import Logger
 
 # TODO: update class (or split) for unsupervised algorithms
 #   visualizations of results is useful for both supervised/unsupervised
@@ -14,7 +17,7 @@ class Predictions:
     def __init__(self, X, y_pred=None, y_true=None, y_std=None,
                  model=None, inputs=None, outputs=None,
                  categories=None, integers=None, postprocessing_fn=None,
-                 fmt='dict'):
+                 fmt='dict', logger=None):
         """
         Inits Predictions class.
 
@@ -27,12 +30,14 @@ class Predictions:
         - integers: round
         - categories: 1 if p > 0.5 else 0 (or max p is multi-class)
 
-        The `postprocessing_fn` is applied after everything else and can be used
-        to perform additional processing of the predictions.
+        The `postprocessing_fn` is applied after everything else and can be
+        used to perform additional processing of the predictions.
 
         Format indicates if data is stored as a dict or as a dataframe.
         """
 
+        self.logger = logger
+        self.fmt = fmt
         self.model = model
 
         # if inputs/outputs is not given, check if they can be deduced from
@@ -78,6 +83,17 @@ class Predictions:
         if self.outputs is not None:
             self.y_pred = self.outputs(self.y_pred, mode='col')
 
+        # get list of id
+        if "id" in X:
+            self.id = X["id"]
+        elif isinstance(X, pd.DataFrame):
+            self.id = list(X.index)
+        else:
+            # if no id is defined (in a column or as an index), then use
+            # the list index?
+            # list(range(len(X)))
+            self.id = None
+
         # after having extracted targets and predictions, we can filter
         # the inputs
         if self.inputs is not None:
@@ -106,8 +122,6 @@ class Predictions:
             self.integers = integers
 
         self.postprocessing_fn = postprocessing_fn
-
-        self.fmt = fmt
 
         # apply processing to predictions
         self._process_predictions()
@@ -159,6 +173,9 @@ class Predictions:
         if self.postprocessing_fn is not None:
             self.y_pred = self.postprocessing_fn(self.y_pred)
 
+    def __getitem__(self, key):
+        return self.see_feature(key)
+
     def see_feature(self, feature, fmt=None):
         """
         Summarize feature results in one dataframe.
@@ -170,25 +187,125 @@ class Predictions:
         if self.y_true is None:
             return self.y_pred[feature]
 
-        dic = {#"id": self.y_pred["id"],
-               feature + "_true": self.y_true[feature],
-               feature + "_pred": self.y_pred[feature],
-               feature + "_err": self.errors[feature],
-               feature + "_rel": self.rel_errors[feature]}
+        if self.id is not None:
+            dic = {"id": self.id}
+        else:
+            dic = {}
+
+        dic.update({feature + "_true": self.y_true[feature],
+                    feature + "_pred": self.y_pred[feature],
+                    feature + "_err": self.errors[feature],
+                    feature + "_rel": self.rel_errors[feature]})
 
         fmt = fmt or self.fmt
 
         if fmt == "dataframe":
-            # TODO: set id
+            # beter to set index if present?
+            # return pd.DataFrame(dic).set_index("id")
             return pd.DataFrame(dic)
         else:
             return dic
 
-    def __getitem__(self, key):
-        return self.see_feature(key)
+    def plot_feature(self, feature, normalized=True, bins=None, log=False,
+                     filename="", logtime=True):
 
-    def save_predictions(self, filename=""):
+        # errors defined without sign in [Skiena, p. 222]
+
+        logger = self.logger or Logger
+        styles = logger.styles
+
+        pred = self.y_pred[feature]
+        true = self.y_true[feature]
+
+        xlabel = "{}".format(feature)
+
+        if normalized is True:
+            ylabel = "PDF"
+            density = True
+        else:
+            ylabel = "Count"
+            density = False
+
+        if bins is None:
+            bins = logger.find_bins(pred)
+
+        fig, ax = plt.subplots()
+
+        ax.hist([pred, true], linewidth=1., histtype='step', bins=bins,
+                density=density, log=log,
+                label=[styles["label:true"], styles["label:pred"]],
+                color=[styles["color:true"], styles["color:pred"]])
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        ax.legend()
+
+        for tick in ax.get_xticklabels():
+            tick.set_rotation(45)
+
+        fig.tight_layout()
+
+        if self.logger is not None:
+            self.logger.save_fig(fig, filename, logtime)
+
+        return fig
+
+    def plot_errors(self, feature, relative=False, signed=True,
+                    normalized=True, bins=None, log=False,
+                    filename="", logtime=True):
+
+        logger = self.logger or Logger
+
+        # errors defined without sign in [Skiena, p. 222]
+
+        if relative is True:
+            if signed is True:
+                errors = self.rel_errors[feature]
+                xlabel = "{} (relative errors)".format(feature)
+            else:
+                errors = self.rel_errors[feature]
+                xlabel = "{} (unsigned relative errors)".format(feature)
+        else:
+            if signed is True:
+                errors = self.errors[feature]
+                xlabel = "{} (absolute errors)".format(feature)
+            else:
+                errors = self.errors[feature]
+                xlabel = "{} (unsigned absolute errors)".format(feature)
+
+        if normalized is True:
+            ylabel = "PDF"
+            density = True
+        else:
+            ylabel = "Count"
+            density = False
+
+        if bins is None:
+            bins = logger.find_bins(errors)
+
+        fig, ax = plt.subplots()
+
+        ax.hist(errors, linewidth=1., histtype='step', bins=bins,
+                density=density, log=log,
+                color=logger.styles["color:errors"])
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        for tick in ax.get_xticklabels():
+            tick.set_rotation(45)
+
+        fig.tight_layout()
+
+        if self.logger is not None:
+            self.logger.save_fig(fig, filename, logtime)
+
+        return fig
+
+    def save_feature(self, filename="", logtime=True):
 
         # TODO: csv, json (+gz)
         # sort columns like in see_feature
+
         pass

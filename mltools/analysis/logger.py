@@ -9,6 +9,8 @@ argument to the functions displaying or saving results.
 import os
 import time
 
+import numpy as np
+
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 # import seaborn as sns
@@ -17,6 +19,17 @@ from matplotlib.backends.backend_pdf import PdfPages
 # TODO: prevent display of graphs
 
 # TODO: custom plot method: take logger instance as argument
+
+
+STYLES = {"color:true": "tab:blue",
+          "color:pred": "tab:green",
+          "color:train": "tab:blue",
+          "color:val": "tab:red",
+          "color:test": "tab:purple",
+          "color:errors": "tab:blue",
+          "label:true": "true",
+          "label:pred": "pred"
+          }
 
 
 def inserttofilename(filename, text=""):
@@ -40,17 +53,15 @@ class Logger:
     """
     Store informations to display and save results.
 
+    The class contains a `styles` dictionary which describes the default value
+    for various styling parameters. It can be updated per instance. Using it
+    through the class `Logger` always gives the default values.
+
     Attributes:
         logtime (str): time at which the class
     """
 
-    styles = {
-        "color:original": "blue",
-        "color:predictions": "green",
-        "color:training": "blue",
-        "color:validation": "green",
-        "color:test": "purple"
-    }
+    styles = STYLES
 
     def __init__(self, path="", logtime="folder",
                  logtime_fmt="%Y-%m-%d-%H%M%S"):
@@ -68,6 +79,8 @@ class Logger:
                 Default to "folder".
             logtime_fmt (str): time format.
         """
+
+        self.styles = STYLES.copy()
 
         # set base path to use when only filename is given
         self.path = os.path.abspath(path)
@@ -240,3 +253,14 @@ class Logger:
         text += "\n".join('- %s = %s' % (k, v) for k, v in dic.items())
 
         return text
+
+    @staticmethod
+    def find_bins(data):
+        """
+        Find the number of bins appropriate for data.
+
+        This uses the rule from [Skiena, 2017]: bins = max(floor(n/25), 100),
+        where n is the number of samples.
+        """
+
+        return max(int(len(data) / 25), 100)
