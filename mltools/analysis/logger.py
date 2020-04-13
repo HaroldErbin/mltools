@@ -217,7 +217,8 @@ class Logger:
         with open(filename, 'w') as f:
             f.write(text)
 
-    def save_csv(self, data, sep='\t', float_fmt=None, filename="", logtime=True):
+    def save_csv(self, data, sep='\t', float_fmt=None, filename="",
+                 logtime=True):
         """
         Save data in CSV file.
 
@@ -229,6 +230,8 @@ class Logger:
         without any formatting.
         """
 
+        # TODO: add gzip compression
+
         if filename == "":
             return
 
@@ -239,7 +242,7 @@ class Logger:
         if isinstance(data, dict):
             data = pd.DataFrame(data)
 
-        if isinstance(data, pd.DataFrame):
+        if isinstance(data, (pd.DataFrame, pd.Series)):
             data.to_csv(filename, sep=sep, float_format=float_fmt)
         elif isinstance(data, (tuple, list)):
             with open(filename, 'w') as f:

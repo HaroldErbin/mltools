@@ -12,6 +12,9 @@ from mltools.analysis.logger import Logger
 #   but discussion of errors is valid only for supervised
 
 
+# TODO: make code compatible with X and y written as array
+
+
 class Predictions:
 
     def __init__(self, X, y_pred=None, y_true=None, y_std=None,
@@ -35,6 +38,9 @@ class Predictions:
 
         Format indicates if data is stored as a dict or as a dataframe.
         """
+
+        # TODO: update to take into account ensemble (keep all results
+        #   in another variable)
 
         self.logger = logger
         self.fmt = fmt
@@ -135,7 +141,8 @@ class Predictions:
 
         # TODO: how to handle tensors?
         #   first convert with datastructure to dict? (to work on array)
-        #   add other measures of errors for vectord (l-norm)
+        #   errors for tensors: l-norm error for each sample,
+        #                       signed error component by component
 
     def _compute_errors(self):
         if self.y_true is None:
@@ -175,9 +182,9 @@ class Predictions:
             self.y_pred = self.postprocessing_fn(self.y_pred)
 
     def __getitem__(self, key):
-        return self.see_feature(key)
+        return self.get_feature(key)
 
-    def see_feature(self, feature, fmt=None, filename="", logtime=True):
+    def get_feature(self, feature, fmt=None, filename="", logtime=True):
         """
         Summarize feature results in one dataframe.
 
@@ -195,6 +202,7 @@ class Predictions:
 
         dic.update({feature + "_true": self.y_true[feature],
                     feature + "_pred": self.y_pred[feature],
+                    # feature + "_std": self.y_std[feature],
                     feature + "_err": self.errors[feature],
                     feature + "_rel": self.rel_errors[feature]})
 
@@ -209,16 +217,44 @@ class Predictions:
             self.logger.save_csv(df, filename=filename, logtime=logtime)
 
         if fmt == "dataframe":
-            # beter to set index if present?
-            # return pd.DataFrame(dic).set_index("id")
+            return df
+        else:
+            return dic
+
+    def get_all_features(self, fmt=None, filename="", logtime=True):
+
+        if self.id is not None:
+            dic = {"id": self.id}
+        else:
+            dic = {}
+
+        for feature in self.y_pred:
+            dic.update(self.get_feature(feature))
+
+        fmt = fmt or self.fmt
+
+        df = pd.DataFrame(dic)
+
+        if self.id is not None:
+            df = df.set_index("id").sort_values(by=['id'])
+
+        if self.logger is not None:
+            self.logger.save_csv(df, filename=filename, logtime=logtime)
+
+        if fmt == "dataframe":
             return df
         else:
             return dic
 
     def plot_feature(self, feature, normalized=True, bins=None, log=False,
                      filename="", logtime=True):
-
         # errors defined without sign in [Skiena, p. 222]
+
+        # TODO: plot_feature calls methods adapted to target type
+        #  (real, binary, ...)
+        #  if type has no function, do not plot
+
+        # TODO: add standard deviation
 
         logger = self.logger or Logger
         styles = logger.styles
@@ -259,6 +295,19 @@ class Predictions:
             self.logger.save_fig(fig, filename, logtime)
 
         return fig
+
+    def plot_all_features(self, normalized=True, bins=None, log=False,
+                          filename="", logtime=True):
+
+        figs = []
+
+        for feature in self.y_pred:
+            figs.append(self.plot_feature(feature, normalized, bins, log))
+
+        if self.logger is not None:
+            self.logger.save_figs(figs, filename, logtime)
+
+        return figs
 
     def plot_errors(self, feature, relative=False, signed=True,
                     normalized=True, bins=None, log=False,
@@ -311,3 +360,81 @@ class Predictions:
             self.logger.save_fig(fig, filename, logtime)
 
         return fig
+
+    def plot_all_errors(self, relative=False, signed=True, normalized=True,
+                        bins=None, log=False, filename="", logtime=True):
+
+        figs = []
+
+        for feature in self.y_pred:
+            figs.append(self.plot_errors(feature, relative, signed, normalized,
+                                         bins, log))
+
+        if self.logger is not None:
+            self.logger.save_figs(figs, filename, logtime)
+
+        return figs
+
+    def plot_feature_errors(self, feature, signed_errors=True,
+                            normalized=True, bins=None, log=False,
+                            filename="", logtime=True):
+
+        fig_feature = self.plot_feature(feature, normalized, bins, log)
+
+        fig_abs_error = self.plot_errors(feature, relative=False,
+                                         signed=signed_errors,
+                                         normalized=normalized,
+                                         bins=bins, log=log)
+
+        fig_rel_error = self.plot_errors(feature, relative=True,
+                                         signed=signed_errors,
+                                         normalized=normalized,
+                                         bins=bins, log=log)
+
+        figs = (fig_feature, fig_abs_error, fig_rel_error)
+
+        if self.logger is not None:
+            self.logger.save_figs(figs, filename, logtime)
+
+        return figs
+
+    def summary_feature(self, feature, fmt=None, signed_errors=True,
+                        normalized=True, bins=None, log=False,
+                        filename="", logtime=True):
+
+        # TODO: add computation of errors
+
+        figs = self.plot_feature_errors(feature, signed_errors, normalized,
+                                        bins, log, filename=filename + ".pdf",
+                                        logtime=logtime)
+
+        data = self.get_feature(feature, fmt, filename=filename + ".csv",
+                                logtime=logtime)
+
+        return data, figs
+
+    def summary(self, fmt=None, signed_errors=True,
+                normalized=True, bins=None, log=False,
+                filename="", logtime=True):
+
+        # TODO: add computation of errors
+
+        figs = []
+
+        figs += self.plot_all_features(normalized=normalized, bins=bins,
+                                       log=log)
+
+        figs += self.plot_all_errors(relative=False, signed=signed_errors,
+                                     normalized=normalized, bins=bins,
+                                     log=log)
+
+        figs += self.plot_all_errors(relative=True, signed=signed_errors,
+                                     normalized=normalized, bins=bins,
+                                     log=log)
+
+        data = self.get_all_features(fmt, filename + ".csv", logtime)
+
+        if self.logger is not None:
+            self.logger.save_figs(figs, filename + ".pdf", logtime)
+
+        return data, figs
