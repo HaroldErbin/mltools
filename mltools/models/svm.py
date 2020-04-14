@@ -25,8 +25,8 @@ class SVM(Model):
 
         self.model = self.create_model()
 
-        default_name = "SVM ({}) {}".format(self.method, hex(id(self)))
-        self.name = name or default_name
+        self.model_name = "SVM ({})".format(self.method)
+        self.name = name
 
     def create_model(self):
         if self.method == "classification":

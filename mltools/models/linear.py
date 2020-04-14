@@ -9,9 +9,10 @@ class LinearRegression(Model):
 
         Model.__init__(self, inputs, outputs, model_params)
 
-        self.name = name or 'LinearRegression {}'.format(hex(id(self)))
-
         self.model = self.create_model()
+
+        self.model_name = "LinearRegression"
+        self.name = name
 
     def create_model(self):
 

@@ -39,8 +39,8 @@ class NeuralNet(Model):
         # model instance
         self.model = self.submodels["model"]
 
-        default_name = "Neural Network {}".format(hex(id(self)))
-        self.name = name or default_name
+        self.model_name = "Neural Network"
+        self.name = name
 
     def create_model(self):
         return self.model_fn(self.inputs, self.outputs, **self.model_params)
@@ -57,8 +57,11 @@ class NeuralNet(Model):
         # TODO: check model type, if sequential, use flat mode,
         #   if functional, use col
 
+        # TODO: define default train parameters
         if train_params is None:
             train_params = {}
+
+        self.train_params_history.append(train_params)
 
         if y is None:
             y = X

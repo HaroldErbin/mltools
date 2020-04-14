@@ -398,6 +398,42 @@ class Predictions:
 
         return figs
 
+    def training_curve(self, history=None, log=True, filename="",
+                       logtime=False):
+
+        # TODO: improve and make more generic
+
+        try:
+            history = history or self.model.model.history
+        except AttributeError:
+            raise TypeError("Model `{}` is not trained by steps and has no "
+                            "has no `history` attribute.".format(self.model))
+
+        fig, ax = plt.subplots()
+
+        styles = self.logger.styles
+
+        ax.plot(history.history['loss'][:], 'o-',
+                color=styles["color:train"], label=styles["label:train"])
+
+        try:
+            ax.plot(history.history['val_loss'][:], 'o--',
+                    color=styles["color:val"], label=styles["label:val"])
+        except (KeyError, IndexError):
+            pass
+
+        ax.legend()
+
+        ax.set_xlabel('Epochs')
+        ax.set_ylabel('Loss')
+
+        if log is True:
+            ax.set_yscale('log')
+
+        self.logger(fig, filename=filename, logtime=logtime)
+
+        return fig
+
     def summary_feature(self, feature, fmt=None, signed_errors=True,
                         normalized=True, bins=None, log=False,
                         filename="", logtime=True):
@@ -421,20 +457,43 @@ class Predictions:
 
         figs = []
 
+        # distributions and error plots
         figs += self.plot_all_features(normalized=normalized, bins=bins,
                                        log=log)
-
         figs += self.plot_all_errors(relative=False, signed=signed_errors,
                                      normalized=normalized, bins=bins,
                                      log=log)
-
         figs += self.plot_all_errors(relative=True, signed=signed_errors,
                                      normalized=normalized, bins=bins,
                                      log=log)
 
-        data = self.get_all_features(fmt, filename + ".csv", logtime)
+        model_text = self.logger.dict_to_text(self.model.model_params)
+        if model_text == "":
+            model_text = "No parameters"
+        else:
+            model_text = "Parameters:\n" + model_text
+        model_text = "Model - %s\n\n" % self.model + model_text
+
+        if len(self.model.train_params_history) > 0:
+            model_text += "\n\nTrain parameters:\n"
+            model_text += self.logger.dict_to_text(self.model.get_train_params)
+
+        try:
+            figs.append(self.training_curve(log=True))
+        except TypeError:
+            pass
+
+        figs.append(self.logger.text_to_fig(model_text))
 
         if self.logger is not None:
-            self.logger.save_figs(figs, filename + ".pdf", logtime)
+            self.logger.save_figs(figs, "%s_summary.pdf" % filename, logtime)
+
+        # save results
+        data = self.get_all_features(fmt, "%s_predictions.csv" % filename,
+                                     logtime)
+
+        # save model parameters
+        self.model.save_params(filename="%s_model_params.json" % filename,
+                               logtime=logtime, logger=self.logger)
 
         return data, figs

@@ -9,6 +9,7 @@ argument to the functions displaying or saving results.
 import os
 import time
 import csv
+import json
 
 import pandas as pd
 import numpy as np
@@ -31,6 +32,9 @@ STYLES = {"color:true": "tab:blue",
           "color:errors": "tab:blue",
           "label:true": "true",
           "label:pred": "pred",
+          "label:train": "train",
+          "label:val": "validation",
+          "label:test": "test",
           "print:float": "{:.4f}",
           "print:percent": "{:.2%}",
           "save:float": "% .5g"
@@ -251,6 +255,16 @@ class Logger:
             raise TypeError("Data with type `{}` cannot be saved to csv."
                             .format(type(data)))
 
+    def save_json(self, data, filename="", logtime=True):
+
+        if filename == "":
+            return
+
+        filename = self.expandpath(filename, logtime)
+
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=4)
+
     def text_to_fig(self, text, filename="", logtime=True):
         """
         Convert text to figure.
@@ -280,19 +294,26 @@ class Logger:
     @staticmethod
     def dict_to_text(dic, text=""):
         """
-        Convert dict to text written as a list.
+        Convert dict to a text written as a list.
+
+        This works recursively, indenting sublist.
 
         If `text` is not empty, then the list is added to the latter.
         """
 
-        # TODO: instead of list save as table (with tab between columns)
+        # TODO: write also function to convert to table
 
         if text != "":
             text += "\n"
 
-        text += "\n".join('- %s = %s' % (k, v) for k, v in dic.items())
+        for k, v in dic.items():
+            if isinstance(v, dict):
+                text += "- %s\n\t" % k
+                text += Logger.dict_to_text(v).replace('\n', '\n\t') + "\n"
+            else:
+                text += "- %s = %s\n" % (k, v)
 
-        return text
+        return text[:-1]
 
     @staticmethod
     def find_bins(data):

@@ -2,6 +2,7 @@
 Generic model class.
 """
 
+import json
 
 from sklearn.pipeline import Pipeline
 
@@ -43,12 +44,16 @@ class Model:
 
         self.model = None
 
+        # keep all train parameters used
+        # not used for many models, but present for uniformity
+        self.train_params_history = []
+
         if model_params is None:
             self.model_params = {}
         else:
             self.model_params = model_params
 
-        self.name = name or 'Model {}'.format(hex(id(self)))
+        self.model_name = "Model"
 
         if (inputs is not None
                 and not isinstance(inputs, (Pipeline, DataStructure))):
@@ -68,13 +73,31 @@ class Model:
         self.outputs = outputs
 
     def __str__(self):
-        return self.name
+        return "{}: {}".format(self.model_name, self.name or hex(id(self)))
 
     def __repr__(self):
         if self.model_params == {}:
             return '<{}>'.format(str(self))
         else:
             return '<{}: {}>'.format(str(self), self.model_params)
+
+    @property
+    def get_train_params(self):
+        if len(self.train_params_history) == 1:
+            return self.train_params_history[0]
+        else:
+            return {"Run %d" % (i+1): v for i, v
+                    in enumerate(self.train_params_history)}
+
+    def save_params(self, filename="", logtime=True, logger=None):
+
+        # TODO: save model name?
+
+        if logger is not None:
+            logger.save_json(self.model_params, filename, logtime)
+        else:
+            with open(filename, 'w') as f:
+                json.dump(self.model_params, f, indent=4)
 
     def fit(self, X, y=None):
 
