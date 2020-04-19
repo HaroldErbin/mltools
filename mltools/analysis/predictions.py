@@ -19,7 +19,7 @@ class Predictions:
 
     def __init__(self, X, y_pred=None, y_true=None, y_std=None,
                  model=None, inputs=None, outputs=None,
-                 categories=None, integers=None, postprocessing_fn=None,
+                 categories_fn=None, integers_fn=None, postprocessing_fn=None,
                  mode='dict', logger=None):
         """
         Inits Predictions class.
@@ -140,22 +140,22 @@ class Predictions:
         # TODO: add this
         # self.y_std = y_std
 
-        if categories is None:
-            self.categories = {}
-        elif isinstance(categories, list):
+        if categories_fn is None:
+            self.categories_fn = {}
+        elif isinstance(categories_fn, list):
             # TODO: default decision function:
             #   1 if p > 0.5 else 0 (or max p is multi-class)
             raise NotImplementedError
         else:
-            self.categories = categories
+            self.categories_fn = categories_fn
 
-        if integers is None:
-            self.integers = {}
-        elif isinstance(integers, list):
+        if integers_fn is None:
+            self.integers_fn = {}
+        elif isinstance(integers_fn, list):
             # default decision for integers: round
-            self.integers = {col: np.round for col in integers}
+            self.integers_fn = {col: np.round for col in integers_fn}
         else:
-            self.integers = integers
+            self.integers_fn = integers_fn
 
         self.postprocessing_fn = postprocessing_fn
 
@@ -191,11 +191,11 @@ class Predictions:
 
     def _process_predictions(self):
 
-        for col, fn in self.categories.items():
+        for col, fn in self.categories_fn.items():
             self.y_pred[col] = fn(self.y_pred[col])
 
-        for col, fn in self.integers.items():
-            self.y_pred[col] = fn(self.y_pred[col])
+        for col, fn in self.integers_fn.items():
+            self.y_pred[col] = fn(self.y_pred[col]).astype(int)
 
         if self.postprocessing_fn is not None:
             self.y_pred = self.postprocessing_fn(self.y_pred)
@@ -203,7 +203,6 @@ class Predictions:
     def __getitem__(self, key):
         return self.get_feature(key)
 
-    @property
     def get_X(self, mode=""):
         mode = mode or self.mode
 
@@ -212,7 +211,6 @@ class Predictions:
         else:
             return self.X
 
-    @property
     def get_y_pred(self, mode=""):
         mode = mode or self.mode
 
@@ -221,7 +219,6 @@ class Predictions:
         else:
             return self.y_pred
 
-    @property
     def get_y_true(self, mode=""):
         mode = mode or self.mode
 
@@ -363,6 +360,8 @@ class Predictions:
 
         # errors defined without sign in [Skiena, p. 222]
 
+        # TODO: filter out infinite values for relative errors
+
         if relative is True:
             if signed is True:
                 errors = self.rel_errors[feature]
@@ -483,6 +482,8 @@ class Predictions:
     def summary_feature(self, feature, mode="", signed_errors=True,
                         normalized=True, bins=None, log=False,
                         filename="", logtime=True):
+
+        # TODO: table of errors (percentiles, max, min)?
 
         # TODO: add computation of errors
 
