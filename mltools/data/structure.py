@@ -293,7 +293,15 @@ class DataStructure:
         return datatools.tab_to_array(self.data_filter(X), flatten=True)
 
     def transform_col(self, X):
-        return datatools.tab_to_array(self.data_filter(X))
+        # keep id column
+        if "id" in X:
+            id_dic = {"id": X["id"]}
+        elif isinstance(X, pd.DataFrame):
+            id_dic = {"id": X.index.to_numpy()}
+        else:
+            id_dic = {}
+
+        return {**id_dic, **datatools.tab_to_array(self.data_filter(X))}
 
     def inverse_transform(self, y):
         if isinstance(y, dict):
@@ -308,8 +316,12 @@ class DataStructure:
                                           .array_to_dict(y, self.shapes))
 
     def inverse_transform_col(self, y):
+        dic = {}
+
         for k, v in y.items():
             shape = v.shape if k in self.with_channels else v.shape[:-1]
-            y[k] = v.reshape(*shape)
+            if shape == ():
+                shape = (-1,)
+            dic[k] = v.reshape(*shape)
 
-        return y
+        return dic

@@ -20,12 +20,20 @@ class Predictions:
     def __init__(self, X, y_pred=None, y_true=None, y_std=None,
                  model=None, inputs=None, outputs=None,
                  categories=None, integers=None, postprocessing_fn=None,
-                 fmt='dict', logger=None):
+                 mode='dict', logger=None):
         """
         Inits Predictions class.
 
         The goal of this class is to first convert the ML output to meaningful
         results. Then, to compare with the real data if they are known.
+
+        The inputs, targets and predictions as given in outputs (or deduced
+        frm the model) are stored in `X`, `y_true` and `y_pred`. They are
+        represented as dict. Other formats can be accessed through the `get_*`
+        methods. Available formats are `dict` and `dataframe`, and the default
+        is defined in `mode`. The reason for not using arrays is that some
+        features need more information (probability distribution...) which
+        would be more difficult to represent as arrays.
 
         `categories` and `integers` are dict mapping features to decision
         functions (to be applied to each sample). They can also be given as
@@ -39,12 +47,20 @@ class Predictions:
         Format indicates if data is stored as a dict or as a dataframe.
         """
 
+        # TODO: format data as array
+
         # TODO: update to take into account ensemble (keep all results
         #   in another variable)
 
         self.logger = logger
-        self.fmt = fmt
         self.model = model
+
+        if mode not in ('dataframe', 'dict'):
+            raise ValueError("Format `{}` is not supported. Available "
+                             "data format are: dict, dataframe."
+                             .format(mode))
+        else:
+            self.mode = mode
 
         # if inputs/outputs is not given, check if they can be deduced from
         # the model
@@ -79,6 +95,10 @@ class Predictions:
             else:
                 self.y_true = y_true
 
+        if not isinstance(self.y_true, dict):
+            raise TypeError("`y_true` must be a `dict`, found {}."
+                            .format(type(self.y_true)))
+
         # if predictions are not given, compute them from the model
         # and input data
         if y_pred is None:
@@ -89,11 +109,15 @@ class Predictions:
         if self.outputs is not None:
             self.y_pred = self.outputs(self.y_pred, mode='col')
 
+        if not isinstance(self.y_pred, dict):
+            raise TypeError("`y_pred` must be a `dict`, found {}."
+                            .format(type(self.y_pred)))
+
         # get list of id
         if "id" in X:
             self.id = X["id"]
         elif isinstance(X, pd.DataFrame):
-            self.id = list(X.index)
+            self.id = X.index.to_numpy()
         else:
             # if no id is defined (in a column or as an index), then use
             # the list index?
@@ -106,6 +130,10 @@ class Predictions:
             self.X = self.inputs(X, mode='col')
         else:
             self.X = X
+
+        if not isinstance(self.X, dict):
+            raise TypeError("`X` must be a `dict`, found {}."
+                            .format(type(self.X)))
 
         # TODO: sort X and y by id if defined?
 
@@ -145,30 +173,21 @@ class Predictions:
         #                       signed error component by component
 
     def _compute_errors(self):
+        # TODO: not true for unsupervised
         if self.y_true is None:
             raise ValueError("Need real results to compute error.")
 
-        errors = {}
-
-        for k, t, p in zip(self.outputs.features,
-                           self.outputs(self.y_true, mode='col').values(),
-                           self.outputs(self.y_pred, mode='col').values()):
-            errors[k] = np.subtract(t, p)
-
-        return errors
+        return {k: np.subtract(self.y_true[k], self.y_pred[k])
+                for k in self.outputs.features}
 
     def _compute_relative_errors(self):
+        # TODO: not true for unsupervised
         if self.y_true is None:
             raise ValueError("Need real results to compute error.")
 
-        errors = {}
-
-        for k, t, p in zip(self.outputs.features,
-                           self.outputs(self.y_true, mode='col').values(),
-                           self.outputs(self.y_pred, mode='col').values()):
-            errors[k] = np.subtract(t, p) / np.abs(t)
-
-        return errors
+        return {k: (np.subtract(self.y_true[k], self.y_pred[k])
+                    / np.abs(self.y_true[k]))
+                for k in self.outputs.features}
 
     def _process_predictions(self):
 
@@ -184,7 +203,34 @@ class Predictions:
     def __getitem__(self, key):
         return self.get_feature(key)
 
-    def get_feature(self, feature, fmt=None, filename="", logtime=True):
+    @property
+    def get_X(self, mode=""):
+        mode = mode or self.mode
+
+        if self.mode == 'dataframe':
+            return pd.DataFrame(self.X)
+        else:
+            return self.X
+
+    @property
+    def get_y_pred(self, mode=""):
+        mode = mode or self.mode
+
+        if self.mode == 'dataframe':
+            return pd.DataFrame(self.y_pred)
+        else:
+            return self.y_pred
+
+    @property
+    def get_y_true(self, mode=""):
+        mode = mode or self.mode
+
+        if self.mode == 'dataframe':
+            return pd.DataFrame(self.y_true)
+        else:
+            return self.y_true
+
+    def get_feature(self, feature, mode="", filename="", logtime=True):
         """
         Summarize feature results in one dataframe.
 
@@ -206,7 +252,7 @@ class Predictions:
                     feature + "_err": self.errors[feature],
                     feature + "_rel": self.rel_errors[feature]})
 
-        fmt = fmt or self.fmt
+        mode = mode or self.mode
 
         df = pd.DataFrame(dic)
 
@@ -216,12 +262,12 @@ class Predictions:
         if self.logger is not None:
             self.logger.save_csv(df, filename=filename, logtime=logtime)
 
-        if fmt == "dataframe":
+        if mode == "dataframe":
             return df
         else:
             return dic
 
-    def get_all_features(self, fmt=None, filename="", logtime=True):
+    def get_all_features(self, mode="", filename="", logtime=True):
 
         if self.id is not None:
             dic = {"id": self.id}
@@ -231,7 +277,7 @@ class Predictions:
         for feature in self.y_pred:
             dic.update(self.get_feature(feature))
 
-        fmt = fmt or self.fmt
+        mode = mode or self.mode
 
         df = pd.DataFrame(dic)
 
@@ -241,7 +287,7 @@ class Predictions:
         if self.logger is not None:
             self.logger.save_csv(df, filename=filename, logtime=logtime)
 
-        if fmt == "dataframe":
+        if mode == "dataframe":
             return df
         else:
             return dic
@@ -430,11 +476,11 @@ class Predictions:
         if log is True:
             ax.set_yscale('log')
 
-        self.logger(fig, filename=filename, logtime=logtime)
+        self.logger.save_fig(fig, filename=filename, logtime=logtime)
 
         return fig
 
-    def summary_feature(self, feature, fmt=None, signed_errors=True,
+    def summary_feature(self, feature, mode="", signed_errors=True,
                         normalized=True, bins=None, log=False,
                         filename="", logtime=True):
 
@@ -444,12 +490,12 @@ class Predictions:
                                         bins, log, filename=filename + ".pdf",
                                         logtime=logtime)
 
-        data = self.get_feature(feature, fmt, filename=filename + ".csv",
+        data = self.get_feature(feature, mode, filename=filename + ".csv",
                                 logtime=logtime)
 
         return data, figs
 
-    def summary(self, fmt=None, signed_errors=True,
+    def summary(self, mode="", signed_errors=True,
                 normalized=True, bins=None, log=False,
                 filename="", logtime=True):
 
@@ -489,7 +535,7 @@ class Predictions:
             self.logger.save_figs(figs, "%s_summary.pdf" % filename, logtime)
 
         # save results
-        data = self.get_all_features(fmt, "%s_predictions.csv" % filename,
+        data = self.get_all_features(mode, "%s_predictions.csv" % filename,
                                      logtime)
 
         # save model parameters
