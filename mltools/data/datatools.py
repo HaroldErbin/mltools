@@ -27,6 +27,14 @@ _LOW_TENSORS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
 # TODO: functions to combine or update dataframes (argument may be dict)
 
 
+def affix_keys(dic, prefix="", suffix=""):
+    """
+    Add prefix and suffix to all keys of a dict.
+    """
+
+    return {(prefix + k + suffix): v for k, v in dic.items()}
+
+
 def tensor_name(dim, channels=False):
     """
     Tensor name from its dimension.

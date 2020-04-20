@@ -5,52 +5,13 @@ Define the metrics used for the different feature types.
 import numpy as np
 import pandas as pd
 
-from mltools.data.features import CategoricalFeatures
-from mltools.data.structure import DataStructure
+
+# TODO: display metric names: upper case, not underscore, same length string
 
 
-def get_eval_class(data, name=None, features=None):
-    """
-    Find the appropriate class to evaluate the data.
+class TensorEval:
 
-    The argument `features` is a list which contains information the data.
-    This can be the class: `DataStructure`, `CategoricalFatures`.
-    If The argument `data` is a series or a dict, then the evaluation method
-    is inferred using the `features` information.
-    """
-
-    if name is None:
-        if isinstance(data, pd.Series):
-            name = data.name
-        elif isinstance(data, dict) and len(data) == 1:
-            name = list(data.keys())[0]
-
-    if features is None or name is None:
-        features = []
-
-    for feature_data in features:
-        if name in feature_data.features:
-            if isinstance(feature_data, CategoricalFeatures):
-                return BinaryEval
-
-    # default choice
-    if np.unique(data) == np.array([0, 1]):
-        return BinaryEval
-    else:
-        return TensorEval
-
-
-class Evaluation:
-
-    # use init class instead of get_eval_class?
-    # store simple errors in class, to avoid recomputing all the time?
-
-    pass
-
-
-class TensorEval(Evaluation):
-
-    metrics = ["mae", "rmse", "norm_mae"]
+    metrics = ["mae", "rmse", "l1_mae", "l2_mae"]
     scalar_metrics = ["mae", "rmse"]
 
     @staticmethod
@@ -60,19 +21,26 @@ class TensorEval(Evaluation):
             return TensorEval.errors(y_true, y_pred)
         elif method == "norm_errors":
             return TensorEval.norm_errors(y_true, y_pred, **kwargs)
-        elif method == "norm_mae":
-            return TensorEval.norm_mae(y_true, y_pred)
+        elif method == "l1_mae":
+            return TensorEval.norm_mae(y_true, y_pred, norm=1)
+        elif method == "l2_mae":
+            return TensorEval.norm_mae(y_true, y_pred, norm=2)
         elif method == "rmse":
             return TensorEval.rmse(y_true, y_pred)
         elif method == "mae":
             return TensorEval.mae(y_true, y_pred)
+        elif callable(method):
+            return method(y_pred, y_true)
+        else:
+            return None
 
     @staticmethod
-    def get_metrics(y_pred, y_true):
-        if TensorEval.is_scalar(y_pred):
-            metrics = TensorEval.scalar_metrics
-        else:
-            metrics = TensorEval.metrics
+    def get_metrics(y_pred, y_true, metrics=None):
+        if metrics is None:
+            if TensorEval.is_scalar(y_pred):
+                metrics = TensorEval.scalar_metrics
+            else:
+                metrics = TensorEval.metrics
 
         return {m: TensorEval.evaluate(y_pred, y_true, method=m)
                 for m in metrics}
@@ -95,15 +63,14 @@ class TensorEval(Evaluation):
         absolute value.
         """
 
-        if isinstance(norm, int):
-            tensor = np.power(np.abs(tensor), norm)
+        if isinstance(norm, (int, str)):
+            return np.linalg.norm(tensor.reshape(len(tensor), -1),
+                                  ord=norm, axis=1)
         elif callable(norm) is True:
-            tensor = norm(tensor)
+            return norm(tensor)
         else:
             raise ValueError("Cannot compute a norm with object `{}`."
                              .format(norm))
-
-        return np.sum(tensor.reshape(len(tensor), -1), axis=1)
 
     @staticmethod
     def norm_errors(y_true, y_pred, norm=1, relative=False):
@@ -123,14 +90,12 @@ class TensorEval(Evaluation):
             return errors
 
     @staticmethod
-    def norm_mae(y_true, y_pred):
+    def norm_mae(y_true, y_pred, norm=2):
         """
         Compute the mean absolute error of the tensor norms.
         """
 
-        n = len(y_pred)
-
-        return np.sum(TensorEval.norm_errors(y_true, y_pred, norm=1)) / n
+        return np.mean(TensorEval.norm_errors(y_true, y_pred, norm=norm))
 
     @staticmethod
     def errors(y_true, y_pred, signed=True, relative=False):
