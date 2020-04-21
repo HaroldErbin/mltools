@@ -24,7 +24,7 @@ from mltools.data.structure import DataStructure
 class Predictions:
 
     def __init__(self, X, y_pred=None, y_true=None, y_std=None,
-                 model=None, inputs=None, outputs=None,
+                 model=None, inputs=None, outputs=None, metrics=None,
                  categories_fn=None, integers_fn=None, postprocessing_fn=None,
                  mode='dict', logger=None):
         """
@@ -40,6 +40,10 @@ class Predictions:
         is defined in `mode`. The reason for not using arrays is that some
         features need more information (probability distribution...) which
         would be more difficult to represent as arrays.
+
+        `metrics` is a dict mapping each feature to a default metric for each
+        feature. If a feature has no default metric, this will use the
+        metric defined in the correspondng evaluation class.
 
         `categories` and `integers` are dict mapping features to decision
         functions (to be applied to each sample). They can also be given as
@@ -72,6 +76,27 @@ class Predictions:
                              .format(mode))
         else:
             self.mode = mode
+
+        if metrics is None:
+            self.metrics = {}
+        else:
+            self.metrics = metrics
+        # TODO: check that metrics is a dict
+
+        # check inputs, outputs, and put in form the data
+        self._check_io_data(inputs, outputs, X, y_pred, y_true)
+
+        # apply processing to predictions
+        self._process_predictions(categories_fn, integers_fn,
+                                  postprocessing_fn)
+
+        # evaluate predictions for each feature based on its type
+        self.predictions = self._typed_predictions()
+
+    def __getitem__(self, key):
+        return self.get_feature(key)
+
+    def _check_io_data(self, inputs, outputs, X, y_pred, y_true):
 
         # if inputs/outputs is not given, check if they can be deduced from
         # the model
@@ -157,6 +182,10 @@ class Predictions:
         else:
             self.features = list(self.y_pred.keys())
 
+    def _process_predictions(self, categories_fn, integers_fn,
+                             postprocessing_fn):
+
+        # store processing functions
         if categories_fn is None:
             self.categories_fn = {}
         elif isinstance(categories_fn, list):
@@ -176,18 +205,15 @@ class Predictions:
 
         self.postprocessing_fn = postprocessing_fn
 
-        # apply processing to predictions
-        self._process_predictions()
+        # process data
+        for col, fn in self.categories_fn.items():
+            self.y_pred[col] = fn(self.y_pred[col])
 
-        # evaluate predictions for each feature based on its type
-        self.predictions = self._typed_predictions()
+        for col, fn in self.integers_fn.items():
+            self.y_pred[col] = fn(self.y_pred[col]).astype(int)
 
-        # compute errors
-        self.errors = {f: p.errors for f, p in self.predictions.items()}
-        self.rel_errors = {f: p.errors for f, p in self.predictions.items()}
-
-    def __getitem__(self, key):
-        return self.get_feature(key)
+        if self.postprocessing_fn is not None:
+            self.y_pred = self.postprocessing_fn(self.y_pred)
 
     def _typed_predictions(self):
         """
@@ -197,8 +223,10 @@ class Predictions:
         dic = {}
 
         for k in self.features:
-            dic[k] = self._prediction_type(k)(k, self.y_pred[k], self.y_true[k],
-                                              self.idx, self.logger)
+            metric = self.metrics.get(k, None)
+            dic[k] = self._prediction_type(k)(k, self.y_pred[k],
+                                              self.y_true[k],
+                                              self.idx, metric, self.logger)
 
         return dic
 
@@ -211,17 +239,6 @@ class Predictions:
         # check in CategoricalFeatures for classification
 
         return TensorPredictions
-
-    def _process_predictions(self):
-
-        for col, fn in self.categories_fn.items():
-            self.y_pred[col] = fn(self.y_pred[col])
-
-        for col, fn in self.integers_fn.items():
-            self.y_pred[col] = fn(self.y_pred[col]).astype(int)
-
-        if self.postprocessing_fn is not None:
-            self.y_pred = self.postprocessing_fn(self.y_pred)
 
     def get_X(self, mode=""):
         mode = mode or self.mode
@@ -247,21 +264,26 @@ class Predictions:
         else:
             return self.y_true
 
-    def get_errors(self, mode=""):
+    def get_errors(self, mode="", relative=False, norm=False):
         mode = mode or self.mode
 
-        if mode == 'dataframe':
-            return pd.DataFrame(self.errors)
-        else:
-            return self.errors
+        pred_items = self.predictions.items()
 
-    def get_rel_errors(self, mode=""):
-        mode = mode or self.mode
+        errors = {f: p.get_errors(relative=relative, norm=norm)
+                  for f, p in pred_items}
 
         if mode == 'dataframe':
-            return pd.DataFrame(self.rel_errors)
+            return pd.DataFrame(errors)
         else:
-            return self.rel_errors
+            return errors
+
+    def describe_errors(self, relative=False, percentiles=None):
+
+        if percentiles is None:
+            percentiles = [0.25, 0.5, 0.75, 0.95]
+
+        return self.get_errors(mode="dataframe", relative=relative)\
+                   .abs().describe(percentiles=percentiles)
 
     def get_feature(self, feature, mode="", filename="", logtime=True):
 
@@ -295,6 +317,43 @@ class Predictions:
 
         else:
             return dic
+
+    def feature_metric(self, feature, metric=None, mode=None):
+
+        return self.predictions[feature].feature_metric(metric, mode)
+
+    def feature_all_metrics(self, feature, metrics=None, mode=None):
+
+        return self.predictions[feature].feature_all_metrics(metrics, mode)
+
+    def all_feature_metric(self, mode=None):
+
+        # TODO: add dataframe mode?
+
+        if mode == "text":
+            results = {f: self.feature_metric(f, mode="text")
+                       for f in self.features}
+
+            return Logger.dict_to_text(results, sep=":")
+        else:
+            return {f: self.feature_metric(f) for f in self.features}
+
+    def all_feature_all_metrics(self, mode=None, filename="", logtime=True):
+
+        # TODO: add dataframe mode?
+
+        # TODO: don't compute if not needed (in text mode without filename)
+        results = {f: self.feature_all_metrics(f) for f in self.features}
+
+        if self.logger is not None:
+            self.logger.save_json(results, filename=filename, logtime=logtime)
+
+        if mode == "text":
+            results = {f: self.feature_all_metrics(f, mode="dict_text")
+                       for f in self.features}
+            results = Logger.dict_to_text(results, sep="\n")
+
+        return results
 
     def plot_feature(self, feature, normalized=True, bins=None, log=False,
                      filename="", logtime=True, **kwargs):
@@ -390,21 +449,69 @@ class Predictions:
 
         return fig
 
-    def summary_feature(self, feature, mode="", signed_errors=True,
-                        normalized=True, bins=None, log=False,
-                        filename="", logtime=True, **kwargs):
+    def summary_feature(self, feature, mode="", metrics=None,
+                        signed_errors=True, normalized=True, bins=None,
+                        log=False, filename="", logtime=True, **kwargs):
 
         return self.predictions[feature]\
-                   .summary_feature(mode, signed_errors, normalized, bins,
-                                    log, filename, logtime, **kwargs)
+                   .summary_feature(mode, metrics, signed_errors, normalized,
+                                    bins, log, filename, logtime, **kwargs)
 
     def summary(self, mode="", signed_errors=True,
                 normalized=True, bins=None, log=False,
-                filename="", logtime=True):
+                filename="", logtime=True, show=False):
 
         # TODO: add computation of errors
 
+        if filename == "":
+            pdf_filename = ""
+            csv_filename = ""
+            json_filename = ""
+        else:
+            pdf_filename = filename + "_summary.pdf"
+            csv_filename = filename + "_predictions.csv"
+            json_filename = filename + "_metrics.json"
+
         figs = []
+
+        # first page of summary
+        if self.logger is not None:
+            intro_text = "# Summary -- {}\n\n"\
+                            .format(self.logger.logtime_text())
+        else:
+            intro_text = "# Summary\n\n"
+        intro_text += "Selected metrics:\n"
+        intro_text += self.all_feature_metric(mode="text")
+
+        figs.append(self.logger.text_to_fig(intro_text))
+
+        if show is True:
+            print(intro_text)
+
+        # summary of all metrics
+        metrics_text = "## Metrics\n\n"
+        metrics_text += self.all_feature_all_metrics(mode="text",
+                                                     filename=json_filename,
+                                                     logtime=logtime)
+
+        figs.append(self.logger.text_to_fig(metrics_text))
+
+        if show is True:
+            print(metrics_text)
+
+        # table of errors
+        error_text = "## Absolute errors -- table\n\n"
+        error_text += str(self.describe_errors(relative=False))
+
+        rel_error_text = "## Relative errors -- table\n\n"
+        rel_error_text += str(self.describe_errors(relative=True))
+
+        figs.append(self.logger.text_to_fig(error_text))
+        figs.append(self.logger.text_to_fig(rel_error_text))
+
+        if show is True:
+            print(error_text)
+            print(rel_error_text)
 
         # distributions and error plots
         figs += self.plot_all_features(normalized=normalized, bins=bins,
@@ -416,12 +523,13 @@ class Predictions:
                                      normalized=normalized, bins=bins,
                                      log=log)
 
+        # page on model information
         model_text = self.logger.dict_to_text(self.model.model_params)
         if model_text == "":
             model_text = "No parameters"
         else:
             model_text = "Parameters:\n" + model_text
-        model_text = "Model - %s\n\n" % self.model + model_text
+        model_text = "## Model - %s\n\n" % self.model + model_text
 
         if len(self.model.train_params_history) > 0:
             model_text += "\n\nTrain parameters:\n"
@@ -435,11 +543,10 @@ class Predictions:
         figs.append(self.logger.text_to_fig(model_text))
 
         if self.logger is not None:
-            self.logger.save_figs(figs, "%s_summary.pdf" % filename, logtime)
+            self.logger.save_figs(figs, pdf_filename, logtime)
 
         # save results
-        data = self.get_all_features(mode, "%s_predictions.csv" % filename,
-                                     logtime)
+        data = self.get_all_features(mode, csv_filename, logtime)
 
         # save model parameters
         self.model.save_params(filename="%s_model_params.json" % filename,
@@ -455,12 +562,19 @@ class TensorPredictions:
     Tensor norms are computed  with the L2-norm, which cannot be changed.
     """
 
+    # TODO: make scatter plot true/pred for 2d data
+    #   (for d > 2, use reduction)
+
     method = TensorEval
 
-    def __init__(self, feature, y_pred, y_true, idx=None, logger=None):
+    def __init__(self, feature, y_pred, y_true, idx=None, metric=None,
+                 logger=None):
 
         self.logger = logger
         self.idx = idx
+
+        # default metric
+        self.metric = metric
 
         # adding the feature name is necessary for plot labels
         self.feature = feature
@@ -483,6 +597,46 @@ class TensorPredictions:
                                                            norm=norm)
         else:
             self.norm_errors = None
+            self.rel_norm_errors = None
+
+    def get_errors(self, mode="", relative=False, norm=False, **kwgargs):
+        """
+        Return errors.
+
+        This method is just another way to retrieve the errors which are
+        always save as attributes to avoid recomputing.
+
+        `**kwargs` is used to catch parameters transmitted for other feature
+        types.
+        """
+
+        if self.is_scalar is False and norm is True:
+            if relative is True:
+                return self.rel_norm_errors
+            else:
+                return self.norm_errors
+        else:
+            if relative is True:
+                return self.rel_errors
+            else:
+                return self.errors
+
+    def _pretty_metric_text(self, dic, logger):
+
+        new_dic = {}
+
+        for k, v in dic.items():
+            # improve names
+            k = self.method._metric_names.get(k, k)
+            # format number according to float format
+            new_dic[k] = logger.styles["print:float"].format(v)
+
+        # align all text together
+        max_length = max(map(len, new_dic.keys()))
+        new_dic = {"{:<{}s}".format(k, max_length): v
+                   for k, v in new_dic.items()}
+
+        return new_dic
 
     def get_feature(self, mode="dict", filename="", logtime=True):
         """
@@ -520,6 +674,45 @@ class TensorPredictions:
             return df
         else:
             return dic
+
+    def feature_metric(self, metric=None, mode=None):
+
+        logger = self.logger or Logger
+
+        metric = metric or self.metric or self.method.default_metric
+
+        result = self.method.evaluate(self.y_pred, self.y_true, method=metric)
+
+        if mode == "text":
+            return "{} = {}"\
+                .format(self.method._metric_names.get(metric, metric),
+                        logger.styles["print:float"].format(result))
+        else:
+            return result
+
+    def feature_all_metrics(self, metrics=None, mode=None, filename="",
+                            logtime=True):
+
+        logger = self.logger or Logger
+
+        results = self.method.eval_metrics(self.y_pred, self.y_true,
+                                           metrics=metrics)
+
+        if self.logger is not None:
+            self.logger.save_json(results, filename=filename, logtime=logtime)
+
+        if mode == "text" or mode == "dict_text":
+            results = self._pretty_metric_text(results, logger)
+
+            if mode == "dict_text":
+                return results
+            else:
+                return logger.dict_to_text(results)
+        elif mode == "series":
+            return pd.Series(list(results.values()),
+                             index=list(results.keys()))
+        else:
+            return results
 
     def plot_feature(self, normalized=True, bins=None, log=False,
                      filename="", logtime=True, norm=True):
@@ -659,7 +852,7 @@ class TensorPredictions:
 
         return figs
 
-    def summary_feature(self, mode="", signed_errors=True,
+    def summary_feature(self, mode="", metrics=None, signed_errors=True,
                         normalized=True, bins=None, log=False,
                         filename="", logtime=True, norm=True):
 
@@ -667,16 +860,36 @@ class TensorPredictions:
 
         # TODO: add computation of errors
 
+        if filename == "":
+            fig_filename = ""
+            csv_filename = ""
+            json_filename = ""
+        else:
+            fig_filename = filename + "_plot.pdf"
+            csv_filename = filename + "_predictions.csv"
+            json_filename = filename + "_metrics.json"
+
+        metric_results = self.feature_all_metrics(metrics,
+                                                  filename=json_filename,
+                                                  logtime=logtime)
+
         figs = self.plot_feature_errors(signed_errors, normalized,
-                                        bins, log, filename=filename + ".pdf",
+                                        bins, log, filename=fig_filename,
                                         logtime=logtime, norm=norm)
 
-        data = self.get_feature(mode, filename=filename + ".csv",
+        data = self.get_feature(mode, filename=csv_filename,
                                 logtime=logtime)
 
-        return data, figs
+        return metric_results, data, figs
 
 
 class BinaryPredictions:
+
+    # TODO: prepare metrics dict using Logger.styles (convert to dict of str)
+    #   indeed, it's not possible to write a generic dict_to_text method
+    #   since it requires knowing about the custom styles and feature names
+
+    # TODO: probbility distribution
+    # probability mean value, variance
 
     pass

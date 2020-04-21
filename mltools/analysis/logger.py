@@ -37,8 +37,8 @@ STYLES = {"color:true": "tab:blue",
           "label:test": "test",
           "print:float": "{:.4f}",
           "print:percent": "{:.2%}",
+          "print:datetime": "%Y-%m-%d %H:%M:%S",
           "save:float": "% .5g"
-          # "logtime": '-%Y-%m-%d-%H%M%S'
           }
 
 
@@ -107,10 +107,17 @@ class Logger:
 
         # set logtime to a fixed value, which is used for all files
         self.logtime = time.strftime(logtime_fmt)
+        self.logtime_fmt = logtime_fmt
 
     def __repr__(self):
         return "<Logger, base = {}, logtime = {}>".format(self.path,
                                                           self.logtime)
+
+    def logtime_text(self, fmt=None):
+        fmt = fmt or self.styles["print:datetime"]
+
+        return time.strftime(fmt,
+                             time.strptime(self.logtime, self.logtime_fmt))
 
     def expandpath(self, filename="", logtime=True):
         """
@@ -280,6 +287,9 @@ class Logger:
             fig (figure): figure containing the text.
         """
 
+        # tabs cannot be read from matplotlib
+        text = text.replace('\t', '  ')
+
         fig, ax = plt.subplots()
 
         # size=12
@@ -292,7 +302,7 @@ class Logger:
         return fig
 
     @staticmethod
-    def dict_to_text(dic, text=""):
+    def dict_to_text(dic, text="", sep=" ="):
         """
         Convert dict to a text written as a list.
 
@@ -311,7 +321,7 @@ class Logger:
                 text += "- %s\n\t" % k
                 text += Logger.dict_to_text(v).replace('\n', '\n\t') + "\n"
             else:
-                text += "- %s = %s\n" % (k, v)
+                text += "- {}{} {}\n".format(k, sep, v)
 
         return text[:-1]
 

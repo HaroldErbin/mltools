@@ -6,41 +6,48 @@ import numpy as np
 import pandas as pd
 
 
-# TODO: display metric names: upper case, not underscore, same length string
+# TODO: custom metrics should be named: how to pass them as argument?
 
 
 class TensorEval:
 
-    metrics = ["mae", "rmse", "l1_mae", "l2_mae"]
-    scalar_metrics = ["mae", "rmse"]
+    tensor_metrics = ["rmse", "mae", "l1_mae", "l2_mae"]
+    metrics = ["rmse", "mae"]
+
+    default_metric = "rmse"
+
+    _metric_names = {"mae": "MAE", "rmse": "RMSE", "l1_mae": "L1 MAE",
+                     "l2_mae": "L2 MAE"}
 
     @staticmethod
     def evaluate(y_pred, y_true, method="rmse", **kwargs):
 
         if method == "errors":
-            return TensorEval.errors(y_true, y_pred)
+            return TensorEval.errors(y_pred, y_true)
         elif method == "norm_errors":
-            return TensorEval.norm_errors(y_true, y_pred, **kwargs)
+            return TensorEval.norm_errors(y_pred, y_true, **kwargs)
         elif method == "l1_mae":
-            return TensorEval.norm_mae(y_true, y_pred, norm=1)
+            return TensorEval.norm_mae(y_pred, y_true, norm=1)
         elif method == "l2_mae":
-            return TensorEval.norm_mae(y_true, y_pred, norm=2)
+            return TensorEval.norm_mae(y_pred, y_true, norm=2)
         elif method == "rmse":
-            return TensorEval.rmse(y_true, y_pred)
+            return TensorEval.rmse(y_pred, y_true)
         elif method == "mae":
-            return TensorEval.mae(y_true, y_pred)
+            return TensorEval.mae(y_pred, y_true)
         elif callable(method):
             return method(y_pred, y_true)
         else:
-            return None
+            return TensorEval.evaluate(y_pred, y_true,
+                                       method=TensorEval.default_metric,
+                                       **kwargs)
 
     @staticmethod
-    def get_metrics(y_pred, y_true, metrics=None):
+    def eval_metrics(y_pred, y_true, metrics=None):
         if metrics is None:
             if TensorEval.is_scalar(y_pred):
-                metrics = TensorEval.scalar_metrics
-            else:
                 metrics = TensorEval.metrics
+            else:
+                metrics = TensorEval.tensor_metrics
 
         return {m: TensorEval.evaluate(y_pred, y_true, method=m)
                 for m in metrics}
@@ -50,12 +57,12 @@ class TensorEval:
         return len(np.shape(tensor)) <= 1
 
     @staticmethod
-    def norm(tensor, norm=1):
+    def vector_norm(tensor, norm=1):
         """
         Compute the norm of a tensor instance-wise.
 
         This computes the norm for each instance using a given function.
-        The result has the same shape as the input.
+        The result is a vector of the same length as the input first dimension.
 
         The argument `norm` can be a number, in which case the L-norm of that
         order is computed for each tensor. Otherwise, it should be a function
@@ -73,7 +80,29 @@ class TensorEval:
                              .format(norm))
 
     @staticmethod
-    def norm_errors(y_true, y_pred, norm=1, relative=False):
+    def norm(tensor, norm=1):
+        """
+        Compute the norm of a tensor.
+
+        This computes the norm for each instance using a given function.
+        The result is a scalar.
+
+        The argument `norm` can be a number, in which case the L-norm of that
+        order is computed for each tensor. Otherwise, it should be a function
+        which computes the appropriate norm. Note that the L-norm takes the
+        absolute value.
+        """
+
+        if isinstance(norm, (int, str)):
+            return np.linalg.norm(tensor.reshape(-1), ord=norm)
+        elif callable(norm) is True:
+            return norm(tensor)
+        else:
+            raise ValueError("Cannot compute a norm with object `{}`."
+                             .format(norm))
+
+    @staticmethod
+    def norm_errors(y_pred, y_true, norm=1, relative=False):
         """
         Compute the errors between the tensor norms.
 
@@ -81,24 +110,24 @@ class TensorEval:
         The output is a vector of length `len(y_pred)`.
         """
 
-        errors = TensorEval.norm(TensorEval.errors(y_true, y_pred),
+        errors = TensorEval.norm(TensorEval.errors(y_pred, y_true),
                                  norm=norm)
 
         if relative is True:
-            return errors / TensorEval.norm(y_true, norm)
+            return errors / TensorEval.vector_norm(y_true, norm)
         else:
             return errors
 
     @staticmethod
-    def norm_mae(y_true, y_pred, norm=2):
+    def norm_mae(y_pred, y_true, norm=2):
         """
         Compute the mean absolute error of the tensor norms.
         """
 
-        return np.mean(TensorEval.norm_errors(y_true, y_pred, norm=norm))
+        return np.mean(TensorEval.norm_errors(y_pred, y_true, norm=norm))
 
     @staticmethod
-    def errors(y_true, y_pred, signed=True, relative=False):
+    def errors(y_pred, y_true, signed=True, relative=False):
         """
         Compute the errors between each component of the tensors.
 
@@ -106,7 +135,7 @@ class TensorEval:
         The result has the same shape as the input.
         """
 
-        errors = np.subtract(y_true, y_pred)
+        errors = np.subtract(y_pred, y_true)
 
         if relative is True:
             errors = np.divide(errors, np.abs(y_true))
@@ -117,30 +146,28 @@ class TensorEval:
         return errors
 
     @staticmethod
-    def rmse(y_true, y_pred):
-        n = np.size(y_pred)
+    def rmse(y_pred, y_true):
+        n = np.sqrt(np.size(y_pred))
 
-        errors = TensorEval.norm_errors(y_true, y_pred, norm=2)
-
-        return np.sqrt(np.sum(errors) / n)
+        return TensorEval.norm(TensorEval.errors(y_pred, y_true), norm=2) / n
 
     @staticmethod
-    def mae(y_true, y_pred):
+    def mae(y_pred, y_true):
         n = np.size(y_pred)
 
-        return np.sum(TensorEval.norm_errors(y_true, y_pred, norm=1)) / n
+        return TensorEval.norm(TensorEval.errors(y_pred, y_true), norm=1) / n
 
-    # def max_error(y_true, y_pred, signed=False, relative=False):
-    #     return np.max(TensorEval.errors(y_true, y_pred, signed, relative))
+    # def max_error(y_pred, y_true, signed=False, relative=False):
+    #     return np.max(TensorEval.errors(y_pred, y_true, signed, relative))
 
-    # def min_error(y_true, y_pred, signed=False, relative=False):
-    #     return np.min(TensorEval.errors(y_true, y_pred, signed, relative))
+    # def min_error(y_pred, y_true, signed=False, relative=False):
+    #     return np.min(TensorEval.errors(y_pred, y_true, signed, relative))
 
-    # def median_error(y_true, y_pred, signed=False, relative=False):
-    #     return np.median(TensorEval.errors(y_true, y_pred, signed, relative))
+    # def median_error(y_pred, y_true, signed=False, relative=False):
+    #     return np.median(TensorEval.errors(y_pred, y_true, signed, relative))
 
-    # def percentile_error(y_true, y_pred, q, signed=False, relative=False):
-    #     return np.percentile(TensorEval.errors(y_true, y_pred, signed,
+    # def percentile_error(y_pred, y_true, q, signed=False, relative=False):
+    #     return np.percentile(TensorEval.errors(y_pred, y_true, signed,
     #                                            relative), q)
 
 
