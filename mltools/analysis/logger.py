@@ -295,7 +295,9 @@ class Logger:
         # size=12
         ax.text(0, 1, text, fontfamily='monospace', verticalalignment='center')
         ax.set_axis_off()
-        # fig.tight_layout(pad=0., w_pad=0., h_pad=0.)
+
+        ax.margins(0, 0)
+        fig.tight_layout(pad=10)
 
         self.save_fig(fig, filename=filename, logtime=logtime)
 
