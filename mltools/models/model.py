@@ -4,6 +4,8 @@ Generic model class.
 
 import json
 
+import numpy as np
+
 from sklearn.pipeline import Pipeline
 
 from ..data.structure import DataStructure
@@ -30,9 +32,16 @@ class Model:
     convert them. If they are not define, the inputs and outputs feed
     to the methods should already have the correct format. In this way,
     the models are also compatible as a part of a pipeline.
+
+    By default a model must return a single predictions. Hence, if there are
+    several models, an average must be returned by the model. This is the
+    expected input for the class `Predictions`. Average for identical data
+    can be handled in the `DataStructure` class, but more complex average
+    must be done through the model.
     """
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, name=""):
+    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+                 name=""):
         """
         :param inputs: how input data to the various function should be
             converted before feeding to the model
@@ -40,20 +49,9 @@ class Model:
         :param outputs: how output data to the various function should be
             converted before feeding to the model
         :type outputs: `DataStructure` or `Pipeline`
+        :param n: number of models to train
+        :type outputs: `int`
         """
-
-        self.model = None
-
-        # keep all train parameters used
-        # not used for many models, but present for uniformity
-        self.train_params_history = []
-
-        if model_params is None:
-            self.model_params = {}
-        else:
-            self.model_params = model_params
-
-        self.model_name = "Model"
 
         if (inputs is not None
                 and not isinstance(inputs, (Pipeline, DataStructure))):
@@ -72,6 +70,35 @@ class Model:
         self.inputs = inputs
         self.outputs = outputs
 
+        self.n = n
+
+        # keep all train parameters used
+        # not used for many models, but present for uniformity
+        self.train_params_history = []
+
+        # training history
+        # not used for many models, but present for uniformity
+        self.history = {}
+
+        if model_params is None:
+            self.model_params = {}
+        else:
+            self.model_params = model_params
+
+        self.submodels = None
+        # this must be instantiated for each model class because it may
+        # depend on additional parameters not defined in the general class
+        # (and, conversely, defining these parameters need model_params to
+        # have been defined just before)
+        self.model = None
+
+        # define base for model name
+        # this will be changed in each model
+        self.model_name = "Model"
+        # instance based name to distinguish the models used
+        # this is combined with model_name to give the full name
+        self.name = name
+
     def __str__(self):
         return "{}: {}".format(self.model_name, self.name or hex(id(self)))
 
@@ -80,6 +107,20 @@ class Model:
             return '<{}>'.format(str(self))
         else:
             return '<{}: {}>'.format(str(self), self.model_params)
+
+    @property
+    def n_models(self):
+        """
+        Number of internal models.
+
+        For simple bagging it is equal to `n`, but it may be different when
+        using stacking.
+        """
+
+        if isinstance(self.model, (list, tuple)):
+            return len(self.model)
+        else:
+            return 1
 
     @property
     def get_train_params(self):
@@ -91,7 +132,7 @@ class Model:
 
     def save_params(self, filename="", logtime=True, logger=None):
 
-        # TODO: save model name?
+        # TODO: save model name, n, method...
 
         if logger is not None:
             logger.save_json(self.model_params, filename, logtime)
@@ -99,7 +140,7 @@ class Model:
             with open(filename, 'w') as f:
                 json.dump(self.model_params, f, indent=4)
 
-    def fit(self, X, y=None):
+    def fit(self, X, y=None, cv=False):
 
         if y is None:
             y = X
@@ -109,24 +150,45 @@ class Model:
         if self.outputs is not None:
             y = self.outputs(y, mode='flat')
 
-        return self.model.fit(X, y)
+        if self.n_models > 1:
+            return [m.fit(X, y) for m in self.model]
+        else:
+            return self.model.fit(X, y)
 
-    def predict(self, X):
+    def predict(self, X, return_all=False):
 
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
 
-        y = self.model.predict(X)
+        # test if the model define an ensemble
+        if self.n_models > 1:
+            y = [m.predict(X) for m in self.model]
 
-        if self.outputs is not None:
-            y = self.outputs.inverse_transform(y)
+            if self.outputs is not None:
+                y = [self.outputs.inverse_transform(v) for v in y]
 
-        return y
+            if return_all is True:
+                # return all predictions if explicitly requested
+                return y
+            else:
+                # average predictions
+                if self.outputs is not None:
+                    return self.outputs.average(y)
+                else:
+                    # if no data structure is defined, try brutal average
+                    return np.mean(y, axis=0), np.std(y, axis=0)
+        else:
+            y = self.model.predict(X)
+
+            if self.outputs is not None:
+                y = self.outputs.inverse_transform(y)
+
+            return y
 
     def create_model(self):
         # useful for creating several models (for bagging, cross-validation...)
 
-        raise NotImplementedError
+        raise NotImplementedError("Trying to call abstract `Model` class. ")
 
     def save_model(self, file):
         # save weights

@@ -443,7 +443,11 @@ def linear_indices(shapes):
 
 def split_array(array, shapes):
     """
-    Split matrix into arrays of lower dimensions.
+    Split a matrix into arrays of lower dimensions.
+
+    A vector is a valid input and will be seen as a matrix with one column.
+    This is for compatibility with some algorithms returning a matrix or a
+    vector depending if it is performing a single or several tasks.
 
     Note that the sum of linear dimensions of all shapes may be smaller than
     the linear dimension of the samples. This behaviour is not desirable but
@@ -457,8 +461,13 @@ def split_array(array, shapes):
 
     target_dim = linear_shape(shapes, True)
 
-    # TODO: fails if algorithm return 1d array (e.g. tree)
-    dim = array.shape[1]
+    # some algorithm returns a vector or a matrix, so consider a vector as
+    # a valid matrix
+    try:
+        dim = array.shape[1]
+    except IndexError:
+        dim = 1
+        return [array.reshape(-1, 1)]
 
     if target_dim > dim:
         raise ValueError("The shapes given do not fit in the vector.")

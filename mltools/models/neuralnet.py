@@ -27,9 +27,9 @@ class NeuralNetPredictor():
 class NeuralNet(Model):
 
     def __init__(self, model_fn, inputs=None, outputs=None, model_params=None,
-                 name=""):
+                 n=1, name=""):
 
-        Model.__init__(self, inputs, outputs, model_params)
+        Model.__init__(self, inputs, outputs, model_params, n, name)
 
         self.model_fn = model_fn
 
@@ -40,7 +40,6 @@ class NeuralNet(Model):
         self.model = self.submodels["model"]
 
         self.model_name = "Neural Network"
-        self.name = name
 
     def create_model(self):
         return self.model_fn(self.inputs, self.outputs, **self.model_params)
@@ -71,6 +70,10 @@ class NeuralNet(Model):
         y = self.transform_data(y, self.outputs)
 
         # TODO: add method to prefix keys with inputs/outputs/aux, etc.
+
+        # TODO: create attribute history, which is mean value over the
+        #   different models
+        # self.history = {}
 
         return self.model.fit(X, y, **train_params)
 

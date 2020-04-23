@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 
 from sklearn import svm
+from sklearn.multioutput import MultiOutputRegressor
 
 from .model import Model
 
 
 class SVM(Model):
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, name="",
-                 method="clf"):
+    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+                 name="", method="clf"):
 
-        Model.__init__(self, inputs, outputs, model_params)
+        Model.__init__(self, inputs, outputs, model_params, n, name)
 
         # default arguments
         if "kernel" not in self.model_params:
@@ -23,46 +24,34 @@ class SVM(Model):
         else:
             raise ValueError("Method `%s` not permitted." % method)
 
-        self.model = self.create_model()
+        if n > 1:
+            self.model = [self.create_model() for n in range(self.n)]
+        else:
+            self.model = self.create_model()
 
         self.model_name = "SVM ({})".format(self.method)
-        self.name = name
 
     def create_model(self):
+        params = self.model_params.copy()
+
+        if self.model_params["kernel"] == "linear":
+            del params["kernel"]
+
         if self.method == "classification":
             if self.model_params["kernel"] == "linear":
-                return svm.LinearSVC()
+                return svm.LinearSVC(**params)
             else:
-                return svm.SVC(**self.model_params)
+                return svm.SVC(**params)
+
+            # TODO: check if MultiOutputClassification is needed
+
         elif self.method == "regression":
             if self.model_params["kernel"] == "linear":
-                return svm.LinearSVR()
+                model = svm.LinearSVR(**params)
             else:
-                return svm.SVR(**self.model_params)
+                model = svm.SVR(**params)
 
-    def fit(self, X, y=None):
-
-        # TODO: SVR expects 1d array
-        # update general model and/or datastructure to allow for it
-
-        if y is None:
-            y = X
-
-        if self.inputs is not None:
-            X = self.inputs(X, mode='flat')
-        if self.outputs is not None:
-            y = self.outputs(y, mode='flat')
-
-        return self.model.fit(X, y.reshape(-1))
-
-    def predict(self, X):
-
-        if self.inputs is not None:
-            X = self.inputs(X, mode='flat')
-
-        y = self.model.predict(X).reshape(-1, 1)
-
-        if self.outputs is not None:
-            y = self.outputs.inverse_transform(y)
-
-        return y
+            if len(self.outputs) > 1:
+                return MultiOutputRegressor(model)
+            else:
+                return model

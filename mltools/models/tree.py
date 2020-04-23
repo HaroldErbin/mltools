@@ -3,14 +3,15 @@ from sklearn import tree
 from .model import Model
 
 
+# TODO: implement export_graphviz, export_text
+
+
 class DecistionTree(Model):
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, name="",
-                 method="clf"):
+    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+                 name="", method="clf"):
 
-        Model.__init__(self, inputs, outputs, model_params)
-
-        self.method = method
+        Model.__init__(self, inputs, outputs, model_params, n, name)
 
         if method in ("clf", "classification"):
             self.method = "classification"
@@ -19,10 +20,12 @@ class DecistionTree(Model):
         else:
             raise ValueError("Method `%s` not permitted." % method)
 
-        self.model = self.create_model()
+        if n > 1:
+            self.model = [self.create_model() for n in range(self.n)]
+        else:
+            self.model = self.create_model()
 
         self.model_name = "Decision tree ({})".format(self.method)
-        self.name = name
 
     def create_model(self):
         if self.method == "classification":
@@ -30,16 +33,3 @@ class DecistionTree(Model):
         elif self.method == "regression":
             return tree.DecisionTreeRegressor(**self.model_params)
 
-    def predict(self, X):
-
-        # TODO: fix split_array to avoid this
-
-        if self.inputs is not None:
-            X = self.inputs(X, mode='flat')
-
-        y = self.model.predict(X).reshape(-1, 1)
-
-        if self.outputs is not None:
-            y = self.outputs.inverse_transform(y)
-
-        return y
