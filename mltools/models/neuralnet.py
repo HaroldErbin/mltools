@@ -99,6 +99,7 @@ class NeuralNet(Model):
         functional, then it uses the mode `col` and return the complete
         `dict.
         """
+
         # features = DataStructure
 
         if features is None:

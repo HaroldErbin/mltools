@@ -336,4 +336,4 @@ class Logger:
         where n is the number of samples.
         """
 
-        return max(int(len(data) / 25), 100)
+        return min(int(len(data) / 25), 100)

@@ -13,12 +13,10 @@ from mltools.data.features import CategoricalFeatures
 from mltools.data.structure import DataStructure
 
 
-# TODO: update class (or split) for unsupervised algorithms
-#   visualizations of results is useful for both supervised/unsupervised
-#   but discussion of errors is valid only for supervised
-# TODO: make code compatible with X and y written as array
-# TODO: write function to convert from dict to dataframe (taking into account
+# TODO:
+# - write function to convert from dict to dataframe (taking into account
 #   tensors, etc.)
+# - combine predictions for training and test set
 
 
 class Predictions:
@@ -40,6 +38,9 @@ class Predictions:
         is defined in `mode`. The reason for not using arrays is that some
         features need more information (probability distribution...) which
         would be more difficult to represent as arrays.
+
+        The class cannot take a prediction ensemble as inputs: the average
+        (or any other combination) must be computed before hand.
 
         `metrics` is a dict mapping each feature to a default metric for each
         feature. If a feature has no default metric, this will use the
@@ -138,9 +139,15 @@ class Predictions:
         # if predictions are not given, compute them from the model
         # and input data
         if y_pred is None:
-            self.y_pred = self.model.predict(X)
+            pred = self.model.predict(X)
+            if self.model.n_models > 1:
+                self.y_pred, self.y_std = pred
+            else:
+                self.y_pred = pred
+                self.y_std = None
         else:
             self.y_pred = y_pred
+            self.y_std = y_std
 
         if self.outputs is not None:
             self.y_pred = self.outputs(self.y_pred, mode='col')
@@ -172,9 +179,6 @@ class Predictions:
                             .format(type(self.X)))
 
         # TODO: sort X and y by id if defined?
-
-        # TODO: add this
-        # self.y_std = y_std
 
         # get target feature list
         if self.outputs is not None:
@@ -224,9 +228,11 @@ class Predictions:
 
         for k in self.features:
             metric = self.metrics.get(k, None)
-            dic[k] = self._prediction_type(k)(k, self.y_pred[k],
-                                              self.y_true[k],
-                                              self.idx, metric, self.logger)
+            eval_method = self._prediction_type(k)
+            std = None if self.y_std is None else self.y_std[k]
+
+            dic[k] = eval_method(k, self.y_pred[k], self.y_true[k],
+                                 std, self.idx, metric, self.logger)
 
         return dic
 
@@ -334,7 +340,7 @@ class Predictions:
             results = {f: self.feature_metric(f, mode="text")
                        for f in self.features}
 
-            return Logger.dict_to_text(results, sep=":")
+            return Logger.dict_to_text(results, sep=":\n ")
         else:
             return {f: self.feature_metric(f) for f in self.features}
 
@@ -419,6 +425,7 @@ class Predictions:
         # TODO: improve and make more generic
 
         try:
+            # TODO: use average history, and get std
             history = history or self.model.model.history
         except AttributeError:
             raise TypeError("Model `{}` is not trained by steps and has no "
@@ -535,6 +542,10 @@ class Predictions:
             model_text += "\n\nTrain parameters:\n"
             model_text += self.logger.dict_to_text(self.model.get_train_params)
 
+        # save model parameters
+        self.model.save_params(filename="%s_model_params.json" % filename,
+                               logtime=logtime, logger=self.logger)
+
         try:
             figs.append(self.training_curve(log=True))
         except TypeError:
@@ -547,10 +558,6 @@ class Predictions:
 
         # save results
         data = self.get_all_features(mode, csv_filename, logtime)
-
-        # save model parameters
-        self.model.save_params(filename="%s_model_params.json" % filename,
-                               logtime=logtime, logger=self.logger)
 
         return data, figs
 
@@ -567,8 +574,8 @@ class TensorPredictions:
 
     method = TensorEval
 
-    def __init__(self, feature, y_pred, y_true, idx=None, metric=None,
-                 logger=None):
+    def __init__(self, feature, y_pred, y_true, y_std=None, idx=None,
+                 metric=None, logger=None):
 
         self.logger = logger
         self.idx = idx
@@ -581,6 +588,7 @@ class TensorPredictions:
 
         self.y_pred = y_pred
         self.y_true = y_true
+        self.y_std = y_std
 
         self.is_scalar = self.method.is_scalar(self.y_pred)
 
@@ -726,9 +734,19 @@ class TensorPredictions:
             # TODO: change norm in argument?
             pred = self.method.norm(self.y_pred, norm=2)
             true = self.method.norm(self.y_true, norm=2)
+
+            if self.y_std is not None:
+                std = self.method.norm(self.y_std, norm=2)
+            else:
+                std = None
         else:
             pred = self.y_pred.reshape(-1)
             true = self.y_true.reshape(-1)
+
+            if self.y_std is not None:
+                std = self.y_std.reshape(-1)
+            else:
+                std = None
 
         xlabel = "{}".format(self.feature)
 
@@ -745,10 +763,25 @@ class TensorPredictions:
 
         fig, ax = plt.subplots()
 
-        ax.hist([pred, true], linewidth=1., histtype='step',
-                bins=bins, density=density, log=log,
-                label=[styles["label:pred"], styles["label:true"]],
-                color=[styles["color:pred"], styles["color:true"]])
+        # TODO: improve plot (in particular with errors)
+        # use barplot (from seaborn or matplotlib)
+        # apply np.histogram for mean, mean ± std : errors are the min and
+        # max differences in counts
+
+        # TODO: could use plain color but alpha = 0.5
+
+        label = [styles["label:pred"], styles["label:true"]]
+        color = [styles["color:pred"], styles["color:true"]]
+
+        values, bins, _ = ax.hist([pred, true], linewidth=1., histtype='step',
+                                  bins=bins, density=density, log=log,
+                                  label=label, color=color)
+
+        # too native
+        # if std is not None:
+        #     ax.hist([pred-std, pred+std], linewidth=0.5, histtype='step',
+        #             linestyle='dashed', bins=bins, density=density, log=log,
+        #             color=[styles["color:pred"], styles["color:pred"]])
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)

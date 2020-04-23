@@ -67,10 +67,6 @@ class RatioSample:
     def __repr__(self):
         return "<RatioSample: {}>".format(self.ratios)
 
-    def get_text(self):
-        # text summarizing the splitting, called by the Predictions class
-        pass
-
     def __call__(self, dataset, shuffle=False):
         """
         Split a set of id into subsets according to the class ratios.
