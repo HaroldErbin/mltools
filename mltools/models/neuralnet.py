@@ -12,6 +12,8 @@ Example: for a GAN, the first argument is the complete GAN model,
 the dictionary is made of the generator and discriminator parts.
 """
 
+import numpy as np
+
 from tensorflow import keras
 
 from .model import Model
@@ -33,11 +35,14 @@ class NeuralNet(Model):
 
         self.model_fn = model_fn
 
-        # dict of models
-        self.submodels = self.create_model()
-
-        # model instance
-        self.model = self.submodels["model"]
+        if n > 1:
+            self.submodels = [self.create_model() for n in range(self.n)]
+            self.model = [m["model"] for m in self.submodels]
+        else:
+            # dict of models
+            self.submodels = self.create_model()
+            # main model
+            self.model = self.submodels["model"]
 
         self.model_name = "Neural Network"
 
@@ -48,7 +53,10 @@ class NeuralNet(Model):
         if model is None:
             return self.model
         else:
-            return self.submodels[model]
+            if self.n_models > 1:
+                return [m[model] for m in self.submodels]
+            else:
+                return self.submodels[model]
 
     def fit(self, X, y=None, train_params=None, fit_fn=None):
         # fit_fn: fine-tuned fit function (useful for GAN)
@@ -75,18 +83,42 @@ class NeuralNet(Model):
         #   different models
         # self.history = {}
 
-        return self.model.fit(X, y, **train_params)
+        if self.n_models > 1:
+            model = [m.fit(X, y, **train_params) for m in self.model]
+        else:
+            model = self.model.fit(X, y, **train_params)
 
-    def predict(self, X):
+
+
+        return model
+
+    def predict(self, X, return_all=False):
 
         X = self.transform_data(X, self.inputs)
 
-        y = self.model.predict(X)
+        if self.n_models > 1:
+            y = [m.predict(X) for m in self.model]
 
-        if self.outputs is not None:
-            y = self.outputs.inverse_transform(y)
+            if self.outputs is not None:
+                y = [self.outputs.inverse_transform(v) for v in y]
 
-        return y
+            if return_all is True:
+                # return all predictions if explicitly requested
+                return y
+            else:
+                # average predictions
+                if self.outputs is not None:
+                    return self.outputs.average(y)
+                else:
+                    # if no data structure is defined, try brutal average
+                    return np.mean(y, axis=0), np.std(y, axis=0)
+        else:
+            y = self.model.predict(X)
+
+            if self.outputs is not None:
+                y = self.outputs.inverse_transform(y)
+
+            return y
 
     def transform_data(self, data, features):
         """
@@ -105,7 +137,17 @@ class NeuralNet(Model):
         if features is None:
             return data
 
-        if isinstance(self.model, keras.models.Sequential):
+        # TODO: allow different types of network?
+        if self.n_models > 1:
+            nn_type = set(map(type, self.model))
+            if len(nn_type) > 1:
+                raise ValueError("Cannot handle ensemble of neural networks "
+                                 "of different types.")
+            nn_type = nn_type.pop()
+        else:
+            nn_type = type(self.model)
+
+        if nn_type == keras.models.Sequential:
             if len(features) == 1:
                 # single feature -> return tensor data (preserving shape)
                 return list(features(data, mode="col").values())[0]

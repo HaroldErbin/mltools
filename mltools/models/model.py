@@ -73,12 +73,16 @@ class Model:
         self.n = n
 
         # keep all train parameters used
-        # not used for many models, but present for uniformity
+        # not used by all models
         self.train_params_history = []
 
         # training history
-        # not used for many models, but present for uniformity
+        # not used by all models
         self.history = {}
+
+        # method used (in general classification or regression)
+        # not used by all models
+        self.method = None
 
         if model_params is None:
             self.model_params = {}
@@ -132,13 +136,16 @@ class Model:
 
     def save_params(self, filename="", logtime=True, logger=None):
 
-        # TODO: save model name, n, method...
+        model_params = {"model_name": self.model_name, "name": self.name,
+                        "n": self.n, "method": self.method}
+
+        model_params.update(self.model_params)
 
         if logger is not None:
-            logger.save_json(self.model_params, filename, logtime)
+            logger.save_json(model_params, filename, logtime)
         else:
             with open(filename, 'w') as f:
-                json.dump(self.model_params, f, indent=4)
+                json.dump(model_params, f, indent=4)
 
     def fit(self, X, y=None, cv=False):
 

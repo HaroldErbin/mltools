@@ -85,7 +85,7 @@ class Predictions:
         # TODO: check that metrics is a dict
 
         # check inputs, outputs, and put in form the data
-        self._check_io_data(inputs, outputs, X, y_pred, y_true)
+        self._check_io_data(inputs, outputs, X, y_pred, y_true, y_std)
 
         # apply processing to predictions
         self._process_predictions(categories_fn, integers_fn,
@@ -97,7 +97,7 @@ class Predictions:
     def __getitem__(self, key):
         return self.get_feature(key)
 
-    def _check_io_data(self, inputs, outputs, X, y_pred, y_true):
+    def _check_io_data(self, inputs, outputs, X, y_pred, y_true, y_std):
 
         # if inputs/outputs is not given, check if they can be deduced from
         # the model
@@ -663,13 +663,17 @@ class TensorPredictions:
         else:
             dic = {}
 
-        dic.update({"true": self.y_true, "pred": self.y_pred,
-                    # feature + "std": self.y_std[feature],
-                    "err": self.errors,
-                    "rel": self.rel_errors})
+        dic["true"] = self.y_true
+        dic["pred"] = self.y_pred
+
+        if self.y_std is not None:
+            dic["std"] = self.y_std
+
+        dic["err"] = self.errors
+        dic["rel_err"] = self.rel_errors
 
         if self.is_scalar is False:
-            dic.update({"norm": self.norm_errors})
+            dic["norm_err"] = self.norm_errors
 
         # TODO: this wll not work with tensor, create appropriate function
         # to convert from dict
