@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 from mltools.analysis.logger import Logger
 from mltools.analysis.evaluation import TensorEval
@@ -419,35 +420,53 @@ class Predictions:
                    .plot_feature_errors(signed_errors, normalized, bins, log,
                                         filename, logtime, **kwargs)
 
-    def training_curve(self, history=None, log=True, filename="",
-                       logtime=False):
+    def training_curve(self, metric='loss', history=None, log=True,
+                       filename="", logtime=False):
 
         # TODO: improve and make more generic
 
-        try:
-            # TODO: use average history, and get std
-            history = history or self.model.model.history
-        except AttributeError:
-            raise TypeError("Model `{}` is not trained by steps and has no "
-                            "has no `history` attribute.".format(self.model))
+        history = history or self.model.history
+
+        if isinstance(history, dict):
+            val_history_std = history.get("val_%s_std" + metric, None)
+            val_history = history.get("val_" + metric, None)
+            history_std = history.get(metric + "_std", None)
+            history = history[metric]
+        else:
+            val_history = None
+            val_history_std = None
+            history_std = None
+
+        if history is None or len(history) == 0:
+            return None
 
         fig, ax = plt.subplots()
 
         styles = self.logger.styles
 
-        ax.plot(history.history['loss'][:], 'o-',
+        steps = np.arange(1, len(history)+1, dtype=int)
+
+        ax.plot(steps, history[:], '.-',
                 color=styles["color:train"], label=styles["label:train"])
 
-        try:
-            ax.plot(history.history['val_loss'][:], 'o--',
+        ax.fill_between(steps, history - history_std, history + history_std,
+                        alpha=0.3, color=styles["color:train"])
+
+        if val_history is not None:
+            ax.plot(steps, val_history, '.--',
                     color=styles["color:val"], label=styles["label:val"])
-        except (KeyError, IndexError):
-            pass
+
+            if val_history_std is not None:
+                ax.fill_between(steps, val_history - val_history_std,
+                                val_history + val_history_std,
+                                alpha=0.3, color=styles["color:val"])
+
+        ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(integer=True))
 
         ax.legend()
 
-        ax.set_xlabel('Epochs')
-        ax.set_ylabel('Loss')
+        ax.set_xlabel('epochs')
+        ax.set_ylabel(metric)
 
         if log is True:
             ax.set_yscale('log')
@@ -464,7 +483,7 @@ class Predictions:
                    .summary_feature(mode, metrics, signed_errors, normalized,
                                     bins, log, filename, logtime, **kwargs)
 
-    def summary(self, mode="", signed_errors=True,
+    def summary(self, mode="", training_metrics=None, signed_errors=True,
                 normalized=True, bins=None, log=False,
                 filename="", logtime=True, show=False, add_figs=None):
 
@@ -546,10 +565,12 @@ class Predictions:
         self.model.save_params(filename="%s_model_params.json" % filename,
                                logtime=logtime, logger=self.logger)
 
-        try:
-            figs.append(self.training_curve(log=True))
-        except TypeError:
-            pass
+        if training_metrics is None:
+            training_figs = [self.training_curve(log=True)]
+        else:
+            training_figs = [self.training_curve(log=True, metric=metric)
+                             for metric in training_metrics]
+        figs += [fig for fig in training_figs if fig is not None]
 
         figs.append(self.logger.text_to_fig(model_text))
 

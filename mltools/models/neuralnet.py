@@ -17,6 +17,7 @@ import numpy as np
 from tensorflow import keras
 
 from .model import Model
+from mltools.data.structure import DataStructure
 
 
 # TODO: create a more primitive NeuralNet class used only for predictions?
@@ -84,13 +85,22 @@ class NeuralNet(Model):
         # self.history = {}
 
         if self.n_models > 1:
-            model = [m.fit(X, y, **train_params) for m in self.model]
+            history = [m.fit(X, y, **train_params) for m in self.model]
+            hist, hist_std = DataStructure.average([m.history
+                                                    for m in history])
         else:
-            model = self.model.fit(X, y, **train_params)
+            history = self.model.fit(X, y, **train_params)
+            hist = history.history
+            hist_std = {}
 
+        for metric, values in hist.items():
+            self.history[metric] = np.r_[self.history.get(metric, ()), values]
 
+        for metric, values in hist_std.items():
+            mstd = metric + "_std"
+            self.history[mstd] = np.r_[self.history.get(mstd, ()), values]
 
-        return model
+        return history
 
     def predict(self, X, return_all=False):
 

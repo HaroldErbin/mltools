@@ -327,12 +327,16 @@ class DataStructure:
 
         return dic
 
-    def average(self, ensemble):
+    @staticmethod
+    def average(ensemble):
         """
         Compute average of an ensemble of data.
 
         Note that the different elements of the ensemble can have different
         features if written as a dict.
+
+        This is a simple average method which does not take into account
+        the features.
         """
 
         types = set(map(type, ensemble))
@@ -342,7 +346,7 @@ class DataStructure:
                              "single type of predictions. FOund `{}`."
                              .format(types))
 
-        # TODO: more complete average for other types
+        # TODO: write second method for more complete average for other types
 
         if dict in types:
             data = {}

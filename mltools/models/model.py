@@ -157,6 +157,8 @@ class Model:
         if self.outputs is not None:
             y = self.outputs(y, mode='flat')
 
+        # TODO: if verbose is in train_params, write which model is trained
+
         if self.n_models > 1:
             return [m.fit(X, y) for m in self.model]
         else:
