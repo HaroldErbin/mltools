@@ -362,20 +362,22 @@ class Predictions:
 
         return results
 
-    def plot_feature(self, feature, normalized=True, bins=None, log=False,
-                     filename="", logtime=True, **kwargs):
+    def plot_feature(self, feature, plottype="step", sigma=2, density=True,
+                     bins=None, log=False, filename="", logtime=True,
+                     **kwargs):
 
         return self.predictions[feature]\
-                   .plot_feature(normalized, bins, log,
+                   .plot_feature(plottype, density, sigma, bins, log,
                                  filename, logtime, **kwargs)
 
-    def plot_all_features(self, normalized=True, bins=None, log=False,
-                          filename="", logtime=True):
+    def plot_all_features(self, plottype="step", sigma=2, density=True,
+                          bins=None, log=False, filename="", logtime=True):
 
         figs = []
 
         for feature in self.features:
-            figs.append(self.plot_feature(feature, normalized, bins, log))
+            figs.append(self.plot_feature(feature, plottype, sigma, density,
+                                          bins, log))
 
         if self.logger is not None:
             self.logger.save_figs(figs, filename, logtime)
@@ -383,7 +385,7 @@ class Predictions:
         return figs
 
     def plot_errors(self, feature, relative=False, signed=True,
-                    normalized=True, bins=None, log=False,
+                    density=True, bins=None, log=False,
                     filename="", logtime=True, **kwargs):
         """
         Plot feature errors.
@@ -393,32 +395,31 @@ class Predictions:
         """
 
         return self.predictions[feature]\
-                   .plot_errors(relative, signed, normalized, bins, log,
+                   .plot_errors(relative, signed, density, bins, log,
                                 filename, logtime, **kwargs)
 
-    def plot_all_errors(self, relative=False, signed=True, norm=True,
-                        normalized=True, bins=None, log=False,
-                        filename="", logtime=True):
+    def plot_all_errors(self, relative=False, signed=True,
+                        density=True, bins=None, log=False,
+                        filename="", logtime=True, **kwargs):
 
         figs = []
 
         for feature in self.features:
             figs.append(self.plot_errors(feature, relative, signed,
-                                         normalized, bins, log,
-                                         norm=norm))
+                                         density, bins, log, **kwargs))
 
         if self.logger is not None:
             self.logger.save_figs(figs, filename, logtime)
 
         return figs
 
-    def plot_feature_errors(self, feature, signed_errors=True,
-                            normalized=True, bins=None, log=False,
+    def plot_feature_errors(self, feature, sigma=2, signed_errors=True,
+                            density=True, bins=None, log=False,
                             filename="", logtime=True, **kwargs):
 
         return self.predictions[feature]\
-                   .plot_feature_errors(signed_errors, normalized, bins, log,
-                                        filename, logtime, **kwargs)
+                   .plot_feature_errors(sigma, signed_errors, density, bins,
+                                        log, filename, logtime, **kwargs)
 
     def training_curve(self, metric='loss', history=None, log=True,
                        filename="", logtime=False):
@@ -426,6 +427,9 @@ class Predictions:
         # TODO: improve and make more generic
 
         history = history or self.model.history
+
+        if history is None or len(history) == 0:
+            return
 
         if isinstance(history, dict):
             val_history_std = history.get("val_%s_std" + metric, None)
@@ -436,9 +440,6 @@ class Predictions:
             val_history = None
             val_history_std = None
             history_std = None
-
-        if history is None or len(history) == 0:
-            return None
 
         fig, ax = plt.subplots()
 
@@ -475,16 +476,16 @@ class Predictions:
 
         return fig
 
-    def summary_feature(self, feature, mode="", metrics=None,
-                        signed_errors=True, normalized=True, bins=None,
+    def summary_feature(self, feature, mode="", metrics=None, sigma=2,
+                        signed_errors=True, density=True, bins=None,
                         log=False, filename="", logtime=True, **kwargs):
 
         return self.predictions[feature]\
-                   .summary_feature(mode, metrics, signed_errors, normalized,
+                   .summary_feature(mode, metrics, signed_errors, density,
                                     bins, log, filename, logtime, **kwargs)
 
     def summary(self, mode="", training_metrics=None, signed_errors=True,
-                normalized=True, bins=None, log=False,
+                density=True, bins=None, log=False,
                 filename="", logtime=True, show=False, add_figs=None):
 
         # TODO: add computation of errors
@@ -539,14 +540,16 @@ class Predictions:
             print(error_text)
             print(rel_error_text)
 
+        # TODO: table of standard deviations
+
         # distributions and error plots
-        figs += self.plot_all_features(normalized=normalized, bins=bins,
-                                       log=log)
+        figs += self.plot_all_features(plottype="step", density=density,
+                                       bins=bins, log=log)
         figs += self.plot_all_errors(relative=False, signed=signed_errors,
-                                     normalized=normalized, bins=bins,
+                                     density=density, bins=bins,
                                      log=log)
         figs += self.plot_all_errors(relative=True, signed=signed_errors,
-                                     normalized=normalized, bins=bins,
+                                     density=density, bins=bins,
                                      log=log)
 
         # page on model information
@@ -751,10 +754,16 @@ class TensorPredictions:
         else:
             return results
 
-    def plot_feature(self, normalized=True, bins=None, log=False,
-                     filename="", logtime=True, norm=True):
+    def plot_feature(self, plottype="step", density=True, sigma=2, bins=None,
+                     log=False, filename="", logtime=True, norm=True):
+        """
+        Plot the distribution of a feature.
 
-        # TODO: add ML standard deviation
+        To get the best from this method, the class must have a `Logger`
+        object.
+        """
+
+        # TODO: option to remove standard deviation
 
         logger = self.logger or Logger
         styles = logger.styles
@@ -777,58 +786,34 @@ class TensorPredictions:
             else:
                 std = None
 
-        xlabel = "{}".format(self.feature)
-
-        if normalized is True:
-            ylabel = "PDF"
-            density = True
-        else:
-            ylabel = "Count"
-            density = False
-
-        if bins is None:
-            # TODO: add option for this behaviour?
-            bins = logger.find_bins(pred)
-
-        fig, ax = plt.subplots()
-
-        # TODO: improve plot (in particular with errors)
-        # use barplot (from seaborn or matplotlib)
-        # apply np.histogram for mean, mean ± std : errors are the min and
-        # max differences in counts
-
-        # TODO: could use plain color but alpha = 0.5
-
-        label = [styles["label:pred"], styles["label:true"]]
-        color = [styles["color:pred"], styles["color:true"]]
-
-        values, bins, _ = ax.hist([pred, true], linewidth=1., histtype='step',
-                                  bins=bins, density=density, log=log,
-                                  label=label, color=color)
-
-        # too native
-        # if std is not None:
-        #     ax.hist([pred-std, pred+std], linewidth=0.5, histtype='step',
-        #             linestyle='dashed', bins=bins, density=density, log=log,
-        #             color=[styles["color:pred"], styles["color:pred"]])
-
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-
-        ax.legend()
-
-        for tick in ax.get_xticklabels():
-            tick.set_rotation(45)
-
-        fig.tight_layout()
+        xlabel = str(self.feature)
 
         if self.logger is not None:
-            self.logger.save_fig(fig, filename, logtime)
+            fig = self.logger.dist(pred, true, std, sigma=sigma,
+                                   plottype=plottype, density=density,
+                                   bins=bins, log=log, xlabel=xlabel,
+                                   filename=filename, logtime=logtime)
+        else:
+            fig, ax = plt.subplots()
+
+            bins = bins or logger.find_bins(pred)
+            ylabel = "PDF" if density is True else "Count"
+            label = [styles["label:pred"], styles["label:true"]]
+            color = [styles["color:pred"], styles["color:true"]]
+
+            values, bins, _ = ax.hist([pred, true], linewidth=1.5,
+                                      histtype='step', bins=bins,
+                                      density=density, log=log,
+                                      label=label, color=color)
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            ax.legend()
+            fig.tight_layout()
 
         return fig
 
     def plot_errors(self, relative=False, signed=True,
-                    normalized=True, bins=None, log=False,
+                    density=True, bins=None, log=False,
                     filename="", logtime=True,
                     norm=False):
 
@@ -861,15 +846,14 @@ class TensorPredictions:
                     errors = np.abs(self.errors)
                     xlabel = "%s (unsigned absolute errors)" % self.feature
 
-        if normalized is True:
+        if density is True:
             ylabel = "PDF"
             density = True
         else:
             ylabel = "Count"
             density = False
 
-        if bins is None:
-            bins = logger.find_bins(errors)
+        bins = bins or logger.find_bins(errors)
 
         fig, ax = plt.subplots()
 
@@ -890,32 +874,47 @@ class TensorPredictions:
 
         return fig
 
-    def plot_feature_errors(self, signed_errors=True,
-                            normalized=True, bins=None, log=False,
+    def plot_feature_errors(self, sigma=2, signed_errors=True,
+                            density=True, bins=None, log=False,
                             filename="", logtime=True, norm=True):
 
-        fig_feature = self.plot_feature(normalized=normalized,
-                                        bins=bins, log=log, norm=norm)
+        feat1 = self.plot_feature(plottype="step", sigma=sigma,
+                                  density=density, bins=bins, log=log,
+                                  norm=norm)
 
-        fig_abs_error = self.plot_errors(relative=False,
-                                         signed=signed_errors,
-                                         normalized=normalized,
-                                         bins=bins, log=log, norm=norm)
+        feat2 = self.plot_feature(plottype="seaborn", sigma=sigma,
+                                  density=density, bins=bins, log=log,
+                                  norm=norm)
 
-        fig_rel_error = self.plot_errors(relative=True,
-                                         signed=signed_errors,
-                                         normalized=normalized,
-                                         bins=bins, log=log, norm=norm)
+        feat3 = self.plot_feature(plottype="line", sigma=sigma,
+                                  density=density, bins=bins, log=log,
+                                  norm=norm)
 
-        figs = [fig_feature, fig_abs_error, fig_rel_error]
+        feat4 = self.plot_feature(plottype="plain", sigma=sigma,
+                                  density=density, bins=bins, log=log,
+                                  norm=norm)
+
+        # fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(6, 4))
+        # axes[0] = fig.axes[0]
+        # axes[1] = fig.axes[0]
+
+        err1 = self.plot_errors(relative=False, signed=signed_errors,
+                                density=density, bins=bins, log=log,
+                                norm=norm)
+
+        err2 = self.plot_errors(relative=True, signed=signed_errors,
+                                density=density, bins=bins, log=log,
+                                norm=norm)
+
+        figs = [feat1, feat2, feat3, feat4, err1, err2]
 
         if self.logger is not None:
             self.logger.save_figs(figs, filename, logtime)
 
         return figs
 
-    def summary_feature(self, mode="", metrics=None, signed_errors=True,
-                        normalized=True, bins=None, log=False,
+    def summary_feature(self, mode="", metrics=None, sigma=2,
+                        signed_errors=True, density=True, bins=None, log=False,
                         filename="", logtime=True, norm=True):
 
         # TODO: table of errors (percentiles, max, min)?
@@ -935,7 +934,7 @@ class TensorPredictions:
                                                   filename=json_filename,
                                                   logtime=logtime)
 
-        figs = self.plot_feature_errors(signed_errors, normalized,
+        figs = self.plot_feature_errors(sigma, signed_errors, density,
                                         bins, log, filename=fig_filename,
                                         logtime=logtime, norm=norm)
 
