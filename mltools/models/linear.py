@@ -6,7 +6,7 @@ from .model import Model
 class LinearRegression(Model):
 
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
-                 name=""):
+                 method="reg", name=""):
         """
         Linear regression.
 
@@ -18,7 +18,7 @@ class LinearRegression(Model):
 
         # TODO: add classification task
 
-        Model.__init__(self, inputs, outputs, model_params, n, name)
+        Model.__init__(self, inputs, outputs, model_params, n, method, name)
 
         if n > 1:
             self.model = [self.create_model() for n in range(self.n)]
@@ -46,7 +46,7 @@ class LinearRegression(Model):
                 or (alpha is not None and rho is not None)):
 
             if alpha is None and rho is None:
-                alpha = l1 + 2 * l2
+                alpha = l1 + l2
                 rho = 0 if alpha == 0 else l1 / alpha
 
             return linear_model.ElasticNet(alpha=alpha, l1_ratio=rho)

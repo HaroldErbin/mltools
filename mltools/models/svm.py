@@ -9,20 +9,13 @@ from .model import Model
 class SVM(Model):
 
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
-                 name="", method="clf"):
+                 method="reg", name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, n, name)
+        Model.__init__(self, inputs, outputs, model_params, method, n, name)
 
         # default arguments
         if "kernel" not in self.model_params:
             self.model_params["kernel"] = "linear"
-
-        if method in ("clf", "classification"):
-            self.method = "classification"
-        elif method in ("reg", "regression"):
-            self.method = "regression"
-        else:
-            raise ValueError("Method `%s` not permitted." % method)
 
         if n > 1:
             self.model = [self.create_model() for n in range(self.n)]

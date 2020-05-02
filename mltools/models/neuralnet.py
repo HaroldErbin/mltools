@@ -30,9 +30,9 @@ class NeuralNetPredictor():
 class NeuralNet(Model):
 
     def __init__(self, model_fn, inputs=None, outputs=None, model_params=None,
-                 n=1, name=""):
+                 n=1, method=None, name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, n, name)
+        Model.__init__(self, inputs, outputs, model_params, n, method, name)
 
         self.model_fn = model_fn
 
@@ -80,25 +80,13 @@ class NeuralNet(Model):
 
         # TODO: add method to prefix keys with inputs/outputs/aux, etc.
 
-        # TODO: create attribute history, which is mean value over the
-        #   different models
-        # self.history = {}
-
+        # train Keras model which returns history
         if self.n_models > 1:
             history = [m.fit(X, y, **train_params) for m in self.model]
-            hist, hist_std = DataStructure.average([m.history
-                                                    for m in history])
+            self.update_history([h.history for h in history])
         else:
             history = self.model.fit(X, y, **train_params)
-            hist = history.history
-            hist_std = {}
-
-        for metric, values in hist.items():
-            self.history[metric] = np.r_[self.history.get(metric, ()), values]
-
-        for metric, values in hist_std.items():
-            mstd = metric + "_std"
-            self.history[mstd] = np.r_[self.history.get(mstd, ()), values]
+            self.update_history(history.history)
 
         return history
 

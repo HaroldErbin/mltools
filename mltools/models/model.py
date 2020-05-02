@@ -41,7 +41,7 @@ class Model:
     """
 
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
-                 name=""):
+                 method=None, name=""):
         """
         :param inputs: how input data to the various function should be
             converted before feeding to the model
@@ -82,7 +82,7 @@ class Model:
 
         # method used (in general classification or regression)
         # not used by all models
-        self.method = None
+        self.method = self._get_method(method)
 
         if model_params is None:
             self.model_params = {}
@@ -111,6 +111,26 @@ class Model:
             return '<{}>'.format(str(self))
         else:
             return '<{}: {}>'.format(str(self), self.model_params)
+
+    @staticmethod
+    def _get_method(method):
+        """
+        Normalize the method name.
+
+        Choices are:
+        - classification (clf)
+        - regression (reg)
+
+        """
+
+        if method in ("clf", "classification"):
+            return "classification"
+        elif method in ("reg", "regression"):
+            return "regression"
+        elif method is None:
+            return None
+        else:
+            raise ValueError("Method `%s` not permitted." % method)
 
     @property
     def n_models(self):
@@ -193,6 +213,35 @@ class Model:
                 y = self.outputs.inverse_transform(y)
 
             return y
+
+    def update_history(self, history):
+        """
+        Update training history.
+        """
+
+        if self.n_models > 1:
+            hist, hist_std = DataStructure.average([h for h in history])
+        else:
+            hist = history
+            hist_std = {}
+
+        for metric, values in hist.items():
+            self.history[metric] = np.r_[self.history.get(metric, ()), values]
+
+        for metric, values in hist_std.items():
+            mstd = metric + "_std"
+            self.history[mstd] = np.r_[self.history.get(mstd, ()), values]
+
+        return {}
+
+    def model_representation(self):
+        """
+        Return a representation of the model.
+
+        This shows how the model makes the computations.
+        """
+
+        raise NotImplementedError
 
     def create_model(self):
         # useful for creating several models (for bagging, cross-validation...)

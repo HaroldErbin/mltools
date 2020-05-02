@@ -363,10 +363,12 @@ class Logger:
         shows the 2 sigma region.
 
         There is one important caveat: when plotting errors in the `line` mode,
-        the upper and lower curves count the highest and lowest number of
+        the upper and lower curves count the highest and lowest numbers of
         values per bin, by comparing the different values obtained for `x` and
          `x ± x_err`. Hence, the area under none of the curves is equal to 1
          when density is true.
+         However, the solid curve displayed corresponds to the mean value
+         and is correctly a density.
 
          A `step_legacy` method is available: it plots the histogram using the
          `plt.hist` method (and thus cannot handle errors). It can be used to
@@ -576,8 +578,8 @@ class Logger:
 
         ax.legend()
 
-        # for tick in ax.get_xticklabels():
-        #     tick.set_rotation(45)
+        for tick in ax.get_xticklabels():
+            tick.set_rotation(45)
 
         fig.tight_layout()
 

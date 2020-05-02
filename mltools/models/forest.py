@@ -7,16 +7,9 @@ from .model import Model
 class RandomForest(Model):
 
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
-                 name="", method="clf"):
+                 method="reg", name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, n, name)
-
-        if method in ("clf", "classification"):
-            self.method = "classification"
-        elif method in ("reg", "regression"):
-            self.method = "regression"
-        else:
-            raise ValueError("Method `%s` not permitted." % method)
+        Model.__init__(self, inputs, outputs, model_params, method, n, name)
 
         if n > 1:
             self.model = [self.create_model() for n in range(self.n)]

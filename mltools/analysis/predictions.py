@@ -481,8 +481,11 @@ class Predictions:
                         log=False, filename="", logtime=True, **kwargs):
 
         return self.predictions[feature]\
-                   .summary_feature(mode, metrics, signed_errors, density,
-                                    bins, log, filename, logtime, **kwargs)
+                   .summary_feature(mode=mode, metrics=metrics, sigma=sigma,
+                                    signed_errors=signed_errors,
+                                    density=density, bins=bins, log=log,
+                                    filename=filename, logtime=logtime,
+                                    **kwargs)
 
     def summary(self, mode="", training_metrics=None, signed_errors=True,
                 density=True, bins=None, log=False,
