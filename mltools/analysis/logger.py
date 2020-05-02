@@ -431,15 +431,20 @@ class Logger:
             # entries are identical (if min = max, one recovers the same index)
             min_args = np.argmin(x_values, axis=1)
             x_min_hist = x_values[np.arange(n), min_args]
+
             mask = np.ones(np.shape(x_values), dtype=bool)
             mask[np.arange(n), min_args] = False
             x_values = x_values[mask].reshape(n, -1)
 
             max_args = np.argmax(x_values, axis=1)
             x_max_hist = x_values[np.arange(n), max_args]
-            mask = np.ones(np.shape(x_values), dtype=bool)
-            mask[np.arange(n), max_args] = False
-            x_hist = x_values[mask]
+
+            # NOTE: change this to plot the intermediate line in
+            #   density histogram (but this is is NOT a density)
+            #   if commented, plot the the real distribution
+            # mask = np.ones(np.shape(x_values), dtype=bool)
+            # mask[np.arange(n), max_args] = False
+            # x_hist = x_values[mask]
 
             # extend values to left and right to close the graph
             widths = np.r_[widths[0], widths, widths[-1]]
