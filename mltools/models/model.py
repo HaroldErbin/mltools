@@ -8,7 +8,8 @@ import numpy as np
 
 from sklearn.pipeline import Pipeline
 
-from ..data.structure import DataStructure
+from mltools.data import datatools
+from mltools.data.structure import DataStructure
 
 
 # TODO: a model can be passed a DataStructure or a Pipeline
@@ -204,8 +205,8 @@ class Model:
                 if self.outputs is not None:
                     return self.outputs.average(y)
                 else:
-                    # if no data structure is defined, try brutal average
-                    return np.mean(y, axis=0), np.std(y, axis=0)
+                    # if no data structure is defined, try simple average
+                    return datatools.average(y)
         else:
             y = self.model.predict(X)
 
@@ -220,7 +221,7 @@ class Model:
         """
 
         if self.n_models > 1:
-            hist, hist_std = DataStructure.average([h for h in history])
+            hist, hist_std = datatools.average([h for h in history])
         else:
             hist = history
             hist_std = {}

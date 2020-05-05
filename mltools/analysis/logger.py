@@ -35,7 +35,7 @@ STYLES = {"color:true": "tab:blue",
           "label:train": "train",
           "label:val": "validation",
           "label:test": "test",
-          "print:float": "{:.4f}",
+          "print:float": "{:.2f}",
           "print:percent": "{:.2%}",
           "print:datetime": "%Y-%m-%d %H:%M:%S",
           "save:float": "% .5g",
@@ -70,6 +70,8 @@ class Logger:
     The class contains a `styles` dictionary which describes the default value
     for various styling parameters. It can be updated per instance. Using it
     through the class `Logger` always gives the default values.
+
+    It also contains few helper methods.
 
     Attributes:
         logtime (str): time at which the class
@@ -589,5 +591,7 @@ class Logger:
         fig.tight_layout()
 
         self.save_fig(fig, filename, logtime)
+
+        plt.close(fig)
 
         return fig

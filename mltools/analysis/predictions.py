@@ -33,15 +33,18 @@ class Predictions:
         results. Then, to compare with the real data if they are known.
 
         The inputs, targets and predictions as given in outputs (or deduced
-        frm the model) are stored in `X`, `y_true` and `y_pred`. They are
+        from the model) are stored in `X`, `y_true` and `y_pred`. They are
         represented as dict. Other formats can be accessed through the `get_*`
         methods. Available formats are `dict` and `dataframe`, and the default
         is defined in `mode`. The reason for not using arrays is that some
         features need more information (probability distribution...) which
         would be more difficult to represent as arrays.
 
-        The class cannot take a prediction ensemble as inputs: the average
-        (or any other combination) must be computed before hand.
+        The predictions can be given from an ensemble, in which case they are
+        stored in `all_y_pred`, and the mean value and standard deviation are
+        computed and stored in `y_pred` and `y_std`.
+        It is necessary to keep track of all predictions for computing the
+        standard deviation of derived quantities (metrics, errors...).
 
         `metrics` is a dict mapping each feature to a default metric for each
         feature. If a feature has no default metric, this will use the
@@ -137,21 +140,34 @@ class Predictions:
             raise TypeError("`y_true` must be a `dict`, found {}."
                             .format(type(self.y_true)))
 
-        # if predictions are not given, compute them from the model
-        # and input data
         if y_pred is None:
-            pred = self.model.predict(X)
-            if self.model.n_models > 1:
-                self.y_pred, self.y_std = pred
-            else:
-                self.y_pred = pred
-                self.y_std = None
+            # if predictions are not given, compute them from the model
+            # and input data
+            self.y_pred = self.model.predict(X, return_all=True)
         else:
             self.y_pred = y_pred
-            self.y_std = y_std
+
+        # if predictions are a list, assume it comes from an ensemble
+        # store mean value in y_pred, keep all predictions in all_y_pred
+        # note that the latter is a list of dict, instead of a dict of list
+        # TODO: change this?
+        if isinstance(self.y_pred, list):
+            self.all_y_pred = self.y_pred
+
+            if self.outputs is not None:
+                self.y_pred, self.y_std = self.outputs.average(self.all_y_pred)
+            else:
+                self.y_pred, self.y_std = datatools.average(self.all_y_pred)
+        else:
+            self.y_std = None
+            self.all_y_pred = None
 
         if self.outputs is not None:
             self.y_pred = self.outputs(self.y_pred, mode='col')
+
+        # override y_std if given
+        if y_std is not None:
+            self.y_std = y_std
 
         if not isinstance(self.y_pred, dict):
             raise TypeError("`y_pred` must be a `dict`, found {}."
@@ -230,10 +246,15 @@ class Predictions:
         for k in self.features:
             metric = self.metrics.get(k, None)
             eval_method = self._prediction_type(k)
+
             std = None if self.y_std is None else self.y_std[k]
+            if self.all_y_pred is None:
+                all_pred = None
+            else:
+                all_pred = [p[k] for p in self.all_y_pred]
 
             dic[k] = eval_method(k, self.y_pred[k], self.y_true[k],
-                                 std, self.idx, metric, self.logger)
+                                 all_pred, std, self.idx, metric, self.logger)
 
         return dic
 
@@ -353,7 +374,14 @@ class Predictions:
         results = {f: self.feature_all_metrics(f) for f in self.features}
 
         if self.logger is not None:
-            self.logger.save_json(results, filename=filename, logtime=logtime)
+            if self.all_y_pred is not None:
+                json = {}
+                for f, v in results.items():
+                    json[f] = [v[0], {k + "_std": m for k, m in v[1].items()}]
+            else:
+                json = results
+
+            self.logger.save_json(json, filename=filename, logtime=logtime)
 
         if mode == "text":
             results = {f: self.feature_all_metrics(f, mode="dict_text")
@@ -443,7 +471,8 @@ class Predictions:
 
         fig, ax = plt.subplots()
 
-        styles = self.logger.styles
+        logger = self.logger or Logger
+        styles = logger.styles
 
         steps = np.arange(1, len(history)+1, dtype=int)
 
@@ -472,7 +501,8 @@ class Predictions:
         if log is True:
             ax.set_yscale('log')
 
-        self.logger.save_fig(fig, filename=filename, logtime=logtime)
+        if self.logger is not None:
+            self.logger.save_fig(fig, filename=filename, logtime=logtime)
 
         return fig
 
@@ -590,6 +620,9 @@ class Predictions:
         # save results
         data = self.get_all_features(mode, csv_filename, logtime)
 
+        for fig in figs:
+            plt.close(fig)
+
         return data, figs
 
 
@@ -605,8 +638,8 @@ class TensorPredictions:
 
     method = TensorEval
 
-    def __init__(self, feature, y_pred, y_true, y_std=None, idx=None,
-                 metric=None, logger=None):
+    def __init__(self, feature, y_pred, y_true, all_y_pred=None, y_std=None,
+                 idx=None, metric=None, logger=None):
 
         self.logger = logger
         self.idx = idx
@@ -619,6 +652,8 @@ class TensorPredictions:
 
         self.y_pred = y_pred
         self.y_true = y_true
+
+        self.all_y_pred = all_y_pred
         self.y_std = y_std
 
         self.is_scalar = self.method.is_scalar(self.y_pred)
@@ -660,22 +695,27 @@ class TensorPredictions:
             else:
                 return self.errors
 
-    def _pretty_metric_text(self, dic, logger):
+    def _pretty_metric_text(self, data, std=None, logger=None):
 
-        new_dic = {}
+        dic = {}
 
-        for k, v in dic.items():
+        logger = logger or Logger
+        float_fmt = logger.styles["print:float"]
+
+        for k, v in data.items():
             # improve names
-            k = self.method._metric_names.get(k, k)
+            new_k = self.method._metric_names.get(k, k)
             # format number according to float format
-            new_dic[k] = logger.styles["print:float"].format(v)
+            dic[new_k] = float_fmt.format(v)
+
+            if std is not None:
+                dic[new_k] += " ± " + float_fmt.format(std[k])
 
         # align all text together
-        max_length = max(map(len, new_dic.keys()))
-        new_dic = {"{:<{}s}".format(k, max_length): v
-                   for k, v in new_dic.items()}
+        max_length = max(map(len, dic.keys()))
+        dic = {"{:<{}s}".format(k, max_length): v for k, v in dic.items()}
 
-        return new_dic
+        return dic
 
     def get_feature(self, mode="dict", filename="", logtime=True):
         """
@@ -721,31 +761,64 @@ class TensorPredictions:
     def feature_metric(self, metric=None, mode=None):
 
         logger = self.logger or Logger
+        float_fmt = logger.styles["print:float"]
 
         metric = metric or self.metric or self.method.default_metric
 
-        result = self.method.evaluate(self.y_pred, self.y_true, method=metric)
+        if self.all_y_pred is not None:
+            all_results = [self.method.evaluate(y, self.y_true, method=metric)
+                           for y in self.all_y_pred]
+
+            result = np.mean(all_results)
+            std = np.std(all_results)
+        else:
+            result = self.method.evaluate(self.y_pred, self.y_true,
+                                          method=metric)
+            std = None
 
         if mode == "text":
-            return "{} = {}"\
-                .format(self.method._metric_names.get(metric, metric),
-                        logger.styles["print:float"].format(result))
+            text = "{} = {}".format(self.method._metric_names
+                                        .get(metric, metric),
+                                    float_fmt.format(result))
+            if std is not None:
+                text += " ± {}".format(float_fmt.format(std))
+
+            return text
         else:
-            return result
+            if std is None:
+                return result
+            else:
+                return result, std
 
     def feature_all_metrics(self, metrics=None, mode=None, filename="",
                             logtime=True):
 
         logger = self.logger or Logger
 
-        results = self.method.eval_metrics(self.y_pred, self.y_true,
-                                           metrics=metrics)
+        if self.all_y_pred is not None:
+            all_results = [self.method.eval_metrics(y, self.y_true,
+                                                    metrics=metrics)
+                           for y in self.all_y_pred]
+
+            results, std = datatools.average(all_results)
+        else:
+            results = self.method.eval_metrics(self.y_pred, self.y_true,
+                                               metrics=metrics)
+            std = None
 
         if self.logger is not None:
-            self.logger.save_json(results, filename=filename, logtime=logtime)
+            if std is not None:
+                json = {}
+                for k in results:
+                    json[k] = results[k]
+                    json[k + "_std"] = std[k]
+            else:
+                json = results
+
+            self.logger.save_json(json, filename=filename, logtime=logtime)
 
         if mode == "text" or mode == "dict_text":
-            results = self._pretty_metric_text(results, logger)
+            results = self._pretty_metric_text(results, std, logger)
 
             if mode == "dict_text":
                 return results
@@ -755,7 +828,10 @@ class TensorPredictions:
             return pd.Series(list(results.values()),
                              index=list(results.keys()))
         else:
-            return results
+            if std is None:
+                return results
+            else:
+                return results, std
 
     def plot_feature(self, plottype="step", density=True, sigma=2, bins=None,
                      log=False, filename="", logtime=True, norm=True):
@@ -812,6 +888,8 @@ class TensorPredictions:
             ax.set_ylabel(ylabel)
             ax.legend()
             fig.tight_layout()
+
+        plt.close(fig)
 
         return fig
 
@@ -874,6 +952,8 @@ class TensorPredictions:
 
         if self.logger is not None:
             self.logger.save_fig(fig, filename, logtime)
+
+        plt.close(fig)
 
         return fig
 
@@ -943,6 +1023,9 @@ class TensorPredictions:
 
         data = self.get_feature(mode, filename=csv_filename,
                                 logtime=logtime)
+
+        for fig in figs:
+            plt.close(fig)
 
         return metric_results, data, figs
 

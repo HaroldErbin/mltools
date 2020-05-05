@@ -488,3 +488,46 @@ def array_to_dict(array, shapes):
     array_list = split_array(array, list(shapes.values()))
 
     return {k: a for k, a in zip(shapes.keys(), array_list)}
+
+
+def exchange_list_dict(data):
+    """
+    Transform a list of dicts into a dict of lists.
+    """
+
+    dic = {}
+
+    for d in data:
+        for k, v in d.items():
+            if k not in dic:
+                dic[k] = []
+            dic[k].append(v)
+
+    return dic
+
+
+def average(ensemble):
+    """
+    Define basic average.
+    """
+
+    types = set(map(type, ensemble))
+
+    if len(types) > 1:
+        raise ValueError("Can average only on an ensemble containing a "
+                         "single type of predictions. FOund `{}`."
+                         .format(types))
+
+    datatype = types.pop()
+
+    if datatype == dict:
+        data = exchange_list_dict(ensemble)
+
+        mean = {f: np.mean(v, axis=0) for f, v in data.items()}
+        std = {f: np.std(v, axis=0) for f, v in data.items()}
+
+    elif datatype in (list, tuple, np.ndarray):
+        mean = np.mean(ensemble, axis=0)
+        std = np.std(ensemble, axis=0)
+
+    return mean, std

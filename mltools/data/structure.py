@@ -327,8 +327,7 @@ class DataStructure:
 
         return dic
 
-    @staticmethod
-    def average(ensemble):
+    def average(self, ensemble):
         """
         Compute average of an ensemble of data.
 
@@ -339,29 +338,6 @@ class DataStructure:
         the features.
         """
 
-        types = set(map(type, ensemble))
-
-        if len(types) > 1:
-            raise ValueError("Can average only on an ensemble containing a "
-                             "single type of predictions. FOund `{}`."
-                             .format(types))
-
         # TODO: write second method for more complete average for other types
 
-        if dict in types:
-            data = {}
-
-            for e in ensemble:
-                for f, v in e.items():
-                    if f in data:
-                        data[f].append(v)
-                    else:
-                        data[f] = [v]
-            mean = {f: np.mean(v, axis=0) for f, v in data.items()}
-            std = {f: np.std(v, axis=0) for f, v in data.items()}
-
-        elif list in types:
-            mean = np.mean(ensemble, axis=0)
-            std = np.std(ensemble, axis=0)
-
-        return mean, std
+        return datatools.average(ensemble)

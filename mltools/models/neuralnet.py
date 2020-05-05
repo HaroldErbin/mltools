@@ -17,7 +17,9 @@ import numpy as np
 from tensorflow import keras
 
 from .model import Model
+
 from mltools.data.structure import DataStructure
+from mltools.analysis.logger import Logger
 
 
 # TODO: create a more primitive NeuralNet class used only for predictions?
@@ -108,8 +110,8 @@ class NeuralNet(Model):
                 if self.outputs is not None:
                     return self.outputs.average(y)
                 else:
-                    # if no data structure is defined, try brutal average
-                    return np.mean(y, axis=0), np.std(y, axis=0)
+                    # if no data structure is defined, try simple average
+                    return Logger.average(y)
         else:
             y = self.model.predict(X)
 
