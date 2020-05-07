@@ -342,7 +342,7 @@ class Logger:
         where n is the number of samples.
         """
 
-        return min(int(len(data) / 25), 100)
+        return min(int(len(data) / 25), 75)
 
     def dist(self, x, x_true=None, x_err=None, sigma=2, plottype='step',
              density=True, bins=None, range=None, log=False,
@@ -433,10 +433,6 @@ class Logger:
             # this will form the envelope of the graphs
             x_min_hist = np.min(x_var_hist, axis=0)
             x_max_hist = np.max(x_var_hist, axis=0)
-
-            print(x_var_hist[:, :10])
-            print(x_min_hist[:10])
-            print(x_max_hist[:10])
 
         # extend values to left and right to close the graph
         widths = np.r_[widths[0], widths, widths[-1]]

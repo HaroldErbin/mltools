@@ -9,7 +9,10 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from mltools.analysis.logger import Logger
+
 from mltools.data.structure import DataStructure
+
 from mltools.models.forest import RandomForest
 
 
@@ -65,10 +68,9 @@ class DataExploration:
     def info(self, data, features=None, filename="", logtime=False):
         data, features = self._prepare(data, features)
 
-        buffer = io.StringIO()
-        data.info(buf=buffer)
-
-        text = buffer.getvalue()
+        with io.StringIO() as buffer:
+            data.info(buf=buffer)
+            text = buffer.getvalue()
 
         if self.logger is not None:
             self.logger.save_text(text, filename, logtime)
@@ -80,17 +82,30 @@ class DataExploration:
 
         data, features = self._prepare(data, features)
 
-        data.describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9])
+        text = str(data.describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9]))
 
-        # if self.logger is not None:
-        #     self.logger.save_text(text, filename, logtime)
+        if self.logger is not None:
+            self.logger.save_text(text, filename, logtime)
 
-        # return text
+        return text
 
-    def distribution(self, data, features=None, bins=50, figsize=(20, 15)):
+    def distribution(self, data, features=None, bins=None, figsize=(20, 15),
+                     filename="", logtime=False):
+
         data, features = self._prepare(data, features)
 
-        data.hist(bins=bins, figsize=figsize)
+        bins = bins or max(50, Logger.find_bins(data))
+
+        axes = data.hist(bins=bins, figsize=figsize)
+
+        fig = axes[0, 0].figure
+
+        if self.logger is not None:
+            self.logger.save_fig(fig, filename=filename, logtime=logtime)
+
+        plt.close()
+
+        return fig
 
     def scatter_plots(self, data, inputs=None, outputs=None):
 
@@ -158,6 +173,8 @@ class DataExploration:
         if self.logger is not None:
             self.logger.save_fig(fig, filename + ".pdf'", logtime)
             self.logger.save_text(text, filename + ".txt", logtime)
+
+        plt.close()
 
         return text, fig
 
@@ -299,11 +316,12 @@ class DataExploration:
         fulltext += "# Dataset statistics (numerical)"
         fulltext += self.describe(data, features)
 
-        self.distribution(data, features, bins=50, figsize=(10, 10))
-        print()
+        fig = self.distribution(data, features, figsize=(10, 10))
+        figs.append(fig)
 
-        self.correlations(data, features)
-        print()
+        # TODO: take only numerical values
+        fig = self.correlations(data, features)
+        figs.append(fig)
 
         fulltext += extra_text
 
