@@ -362,7 +362,11 @@ class Logger:
 
         Errors can be displayed only with `line` and `step` modes. Histograms
         with errors are computed by taking `x ± σ * x_err`. By default this
-        shows the 2 sigma region.
+        shows the 2 sigma region. Note that σ must be an integer.
+        In order to show the region associated to a deviation of σ, we compute
+        the distributions for `y + 1 * std`, `y + 2 * std`, ..., `y + σ * std`.
+        Then we keep the highest and lowest values for each bin. Considering
+        only `y + σ * std` would not see all the intermediate variations.
 
         There is one important caveat: when plotting errors in the `line` mode,
         the upper and lower curves count the highest and lowest numbers of
@@ -386,6 +390,8 @@ class Logger:
         alpha_err = self.styles["alpha:err"]
         color_pred = self.styles["color:pred"]
         color_true = self.styles["color:true"]
+
+        sigma = int(sigma)
 
         # compute range
         if range is None and x_true is not None:
@@ -416,51 +422,35 @@ class Logger:
             x_true_hist, _ = np.histogram(x_true, bins=edges, density=density)
 
         if x_err is not None:
-            x_low = x - sigma * x_err
-            x_up = x + sigma * x_err
+            x_var = np.array([x + s * x_err
+                              for s in np.arange(- sigma, sigma + 1)])
 
-            x_low_hist, _ = np.histogram(x_low, bins=edges, density=density)
-            x_up_hist, _ = np.histogram(x_up, bins=edges, density=density)
-
-            x_values = np.c_[x_hist, x_low_hist, x_up_hist]
-            n = len(x_hist)
+            x_var_hist = np.array([np.histogram(xv, bins=edges,
+                                                density=density)[0]
+                                   for xv in x_var])
 
             # for each bin, find the lowest and highest occupations
             # this will form the envelope of the graphs
-            # the remaining values is used to plot the intermediate line
-            # (or box)
-            # NOTE: we have to do it by steps to avoid problems when all
-            # entries are identical (if min = max, one recovers the same index)
-            min_args = np.argmin(x_values, axis=1)
-            x_min_hist = x_values[np.arange(n), min_args]
+            x_min_hist = np.min(x_var_hist, axis=0)
+            x_max_hist = np.max(x_var_hist, axis=0)
 
-            mask = np.ones(np.shape(x_values), dtype=bool)
-            mask[np.arange(n), min_args] = False
-            x_values = x_values[mask].reshape(n, -1)
+            print(x_var_hist[:, :10])
+            print(x_min_hist[:10])
+            print(x_max_hist[:10])
 
-            max_args = np.argmax(x_values, axis=1)
-            x_max_hist = x_values[np.arange(n), max_args]
+        # extend values to left and right to close the graph
+        widths = np.r_[widths[0], widths, widths[-1]]
+        edges = np.r_[edges[0] - widths[0], edges, edges[-1] + widths[-1]]
+        centers = np.r_[centers[0] - widths[0], centers,
+                        centers[-1] + widths[-1]]
+        x_hist = np.r_[0, x_hist, 0]
 
-            # NOTE: change this to plot the intermediate line in
-            #   density histogram (but this is is NOT a density)
-            #   if commented, plot the the real distribution
-            # mask = np.ones(np.shape(x_values), dtype=bool)
-            # mask[np.arange(n), max_args] = False
-            # x_hist = x_values[mask]
+        if x_err is not None:
+            x_min_hist = np.r_[0, x_min_hist, 0]
+            x_max_hist = np.r_[0, x_max_hist, 0]
 
-            # extend values to left and right to close the graph
-            widths = np.r_[widths[0], widths, widths[-1]]
-            edges = np.r_[edges[0] - widths[0], edges, edges[-1] + widths[-1]]
-            centers = np.r_[centers[0] - widths[0], centers,
-                            centers[-1] + widths[-1]]
-            x_hist = np.r_[0, x_hist, 0]
-
-            if x_err is not None:
-                x_min_hist = np.r_[0, x_min_hist, 0]
-                x_max_hist = np.r_[0, x_max_hist, 0]
-
-            if x_true is not None:
-                x_true_hist = np.r_[0, x_true_hist, 0]
+        if x_true is not None:
+            x_true_hist = np.r_[0, x_true_hist, 0]
 
         if density is True:
             ylabel = "PDF"
