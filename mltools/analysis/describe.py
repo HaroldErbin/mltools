@@ -257,7 +257,8 @@ def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
 
 
 def correlations(data, features=None, targets=None, method="pearson",
-                 y_rot=45, logger=None, filename="", logtime=False):
+                 cmap=None, y_rot=45, logger=None, filename="",
+                 logtime=False):
     """
     Compute and plot correlations between variables.
 
@@ -322,7 +323,10 @@ def correlations(data, features=None, targets=None, method="pearson",
 
     fig, ax = plt.subplots()
 
-    ax.matshow(corr, vmin=-1, vmax=1)
+    if cmap is None:
+        cmap = "RdBu_r"
+
+    pcm = ax.matshow(corr, vmin=-1, vmax=1, cmap=cmap)
 
     ax.set_yticks(np.arange(len(features)))
     ax.set_yticklabels(features)
@@ -334,6 +338,10 @@ def correlations(data, features=None, targets=None, method="pearson",
 
     ax.set_xticks(np.arange(len(targets)))
     ax.set_xticklabels(targets, rotation=y_rot, ha=ha)
+
+    # from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    fig.colorbar(pcm, ax=ax)
 
     plt.close(fig)
 
