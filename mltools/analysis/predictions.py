@@ -712,11 +712,7 @@ class TensorPredictions:
             if std is not None:
                 dic[new_k] += " ± " + float_fmt.format(std[k])
 
-        # align all text together
-        max_length = max(map(len, dic.keys()))
-        dic = {"{:<{}s}".format(k, max_length): v for k, v in dic.items()}
-
-        return dic
+        return datatools.equal_length_names(dic)
 
     def get_feature(self, mode="dict", filename="", logtime=True):
         """

@@ -35,6 +35,37 @@ def affix_keys(dic, prefix="", suffix=""):
     return {(prefix + k + suffix): v for k, v in dic.items()}
 
 
+def equal_length_names(data, align="left"):
+    """
+    Set all a list of strings to the same length.
+
+    If the argument is a dict, then apply the function to the keys.
+
+    Alignment can be `left` or `right`.
+    """
+
+    if isinstance(data, dict):
+        names = data.keys()
+    else:
+        names = data
+
+    max_length = max(map(len, names))
+
+    if align == "right":
+        fmt = "{:>{}s}"
+    else:
+        fmt = "{:<{}s}"
+
+    names = [fmt.format(name, max_length) for name in names]
+
+    if isinstance(data, dict):
+        return dict(zip(names, data.values()))
+    elif isinstance(data, tuple):
+        return tuple(names)
+    else:
+        return names
+
+
 def exchange_list_dict(data):
     """
     Transform a list of dicts into a dict of lists.
