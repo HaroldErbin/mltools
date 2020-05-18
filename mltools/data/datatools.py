@@ -121,14 +121,14 @@ def infer_types(data, ncat=10, dict_type=False):
             dtype = dtype.pop()
 
             if np.issubdtype(dtype, np.str_):
-                if len(values) < ncat:
+                if len(values) <= ncat:
                     return "category"
                 else:
                     return "string"
             elif np.issubdtype(dtype, np.integer):
                 if values == {0, 1}:
                     return "binary"
-                elif len(values) < ncat:
+                elif len(values) <= ncat:
                     return "category"
                 else:
                     return "integer"

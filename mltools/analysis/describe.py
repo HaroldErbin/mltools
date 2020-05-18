@@ -266,10 +266,19 @@ def correlations(data, features=None, targets=None, method="pearson",
     `features`. If `features` is not given, it corresponds to all columns from
     the data.
 
-    The method can be `pearson`, `spearman` or a callable.
+    The method can be `pearson`, `spearman`, `kendall` or a callable.
+
+    The function is using pandas `.corr()` method. If `data` is a dict, it is
+    first converted to a dataframe. To prevent errors, only numerical types
+    are conserved before conversion.
+
+    Correlation are valid only for numerical features, thus, the results may
+    miss some of the features and targets given as inputs if they are not
+    numerical.
     """
 
-    # logger = logger or Logger
+    # TODO: check if pandas compute correlation for more general types like
+    #       dates
 
     if method not in ("pearson", "spearman") and callable(method) is False:
         raise TypeError("Method must be `pearson`, `spearman` or callable. "
@@ -278,15 +287,17 @@ def correlations(data, features=None, targets=None, method="pearson",
     all_features = []
 
     if features is None:
+
         if isinstance(data, pd.DataFrame):
             features = data.columns.to_list()
         elif isinstance(data, dict):
-            features = list(data.keys())
+            # keep only numerical features from dict
+            features = [k for k, t
+                        in datatools.infer_types(data, ncat=0).items()
+                        if t in ("scalar", "integer", "binary")]
         else:
             raise TypeError("Cannot study correlation for object `{}`."
                             .format(type(data)))
-
-        # TODO: filter features which are not scalar
 
     all_features += features
 
@@ -300,6 +311,11 @@ def correlations(data, features=None, targets=None, method="pearson",
                              if k in all_features})
 
     corr = data[all_features].corr(method=method)
+
+    # adapt features and targets if they contain columns for which
+    # correlations could not be computed
+    features = [c for c in corr.index.tolist() if c in features]
+    targets = [c for c in corr.columns.tolist() if c in targets]
 
     if features != targets:
         corr = corr.loc[features, targets]
@@ -360,5 +376,7 @@ def correlation_text(corr):
                               for k, v in corr[target].items())
 
             text += "\n\n"
+
+        text = text[:-2]
 
     return text
