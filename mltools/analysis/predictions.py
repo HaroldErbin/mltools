@@ -8,7 +8,7 @@ import matplotlib as mpl
 
 from mltools.analysis.logger import Logger
 from mltools.analysis.evaluation import TensorEval
-from mltools.analysis import plot
+from mltools.analysis import describe
 
 from mltools.data import datatools
 from mltools.data.features import CategoricalFeatures
@@ -865,11 +865,11 @@ class TensorPredictions:
         xlabel = str(self.feature)
 
         if self.logger is not None:
-            fig = plot.distribution(pred, true, std, sigma=sigma,
-                                    plottype=plottype, density=density,
-                                    bins=bins, log=log, xlabel=xlabel,
-                                    logger=self.logger, filename=filename,
-                                    logtime=logtime)
+            fig = describe.distribution(pred, true, std, sigma=sigma,
+                                        plottype=plottype, density=density,
+                                        bins=bins, log=log, xlabel=xlabel,
+                                        logger=self.logger, filename=filename,
+                                        logtime=logtime)
         else:
             fig, ax = plt.subplots()
 
