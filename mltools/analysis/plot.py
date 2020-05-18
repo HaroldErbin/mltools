@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from mltools.data import datatools
+
 from mltools.analysis.logger import Logger
 
 
@@ -252,3 +254,111 @@ def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
     plt.close(fig)
 
     return fig
+
+
+def correlations(data, features=None, targets=None, method="pearson",
+                 y_rot=45, logger=None, filename="", logtime=False):
+    """
+    Compute and plot correlations between variables.
+
+    Compute correlations in a symmetric way if only `features` is given.
+    If `targets` are given, compute only correlations between `targets` and
+    `features`. If `features` is not given, it corresponds to all columns from
+    the data.
+
+    The method can be `pearson`, `spearman` or a callable.
+    """
+
+    # logger = logger or Logger
+
+    if method not in ("pearson", "spearman") and callable(method) is False:
+        raise TypeError("Method must be `pearson`, `spearman` or callable. "
+                        "Found object {}.".format(type(method)))
+
+    all_features = []
+
+    if features is None:
+        if isinstance(data, pd.DataFrame):
+            features = data.columns.to_list()
+        elif isinstance(data, dict):
+            features = list(data.keys())
+        else:
+            raise TypeError("Cannot study correlation for object `{}`."
+                            .format(type(data)))
+
+        # TODO: filter features which are not scalar
+
+    all_features += features
+
+    if targets is not None:
+        all_features += targets
+    else:
+        targets = features
+
+    if isinstance(data, dict):
+        data = pd.DataFrame({k: v for k, v in data.items()
+                             if k in all_features})
+
+    corr = data[all_features].corr(method=method)
+
+    if features != targets:
+        corr = corr.loc[features, targets]
+
+    fig, ax = plt.subplots()
+
+    ax.matshow(corr, vmin=-1, vmax=1)
+
+    ax.set_yticks(np.arange(len(features)))
+    ax.set_yticklabels(features)
+
+    if y_rot == 90 or y_rot == 0:
+        ha = "center"
+    else:
+        ha = "left"
+
+    ax.set_xticks(np.arange(len(targets)))
+    ax.set_xticklabels(targets, rotation=y_rot, ha=ha)
+
+    plt.close(fig)
+
+    if logger is not None:
+        logger.save_fig(fig, filename, logtime)
+
+    return corr, fig
+
+
+def correlation_text(corr):
+    """
+    Convert correlation dataframe to text.
+    """
+
+    corr_fmt = "{:+8.2f}"
+
+    features = corr.index.tolist()
+    targets = corr.columns.tolist()
+
+    names = datatools.equal_length_names(features, align="right")
+
+    text = ""
+
+    if features == targets:
+        # write coefficients as table
+
+        for i, (name, col) in enumerate(zip(names, features)):
+            text += name
+            text += "".join(corr_fmt.format(v) for j, v
+                            in enumerate(corr.loc[col].values) if j <= i)
+            text += "\n"
+    else:
+        # write coefficients as list
+
+        item_fmt = "  ∝ {}  " + corr_fmt
+
+        for target in targets:
+            text += "- {}\n".format(target)
+            text += "\n".join(item_fmt.format(k, v)
+                              for k, v in corr[target].items())
+
+            text += "\n\n"
+
+    return text
