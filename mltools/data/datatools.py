@@ -35,6 +35,90 @@ def affix_keys(dic, prefix="", suffix=""):
     return {(prefix + k + suffix): v for k, v in dic.items()}
 
 
+def exchange_list_dict(data):
+    """
+    Transform a list of dicts into a dict of lists.
+    """
+
+    dic = {}
+
+    for d in data:
+        for k, v in d.items():
+            if k not in dic:
+                dic[k] = []
+            dic[k].append(v)
+
+    return dic
+
+
+def exchange_keyval(data):
+    """
+    Exchange keys and values of a dict.
+    """
+
+    dic = {}
+
+    for k, v in data.items():
+        if v not in dic:
+            dic[v] = []
+        dic[v].append(k)
+
+    return dic
+
+
+def infer_types(data, ncat=10, dict_type=False):
+    """
+    Infer data type.
+
+    The parameter `ncat` indicates the threshold of different values below
+    which the data is considered as categorical.
+
+    If the data is a dict or a dataframe, then: if `dict_type` is `True, keys
+    are data types and values are column names, otherwise it is the converse.
+    """
+
+    if isinstance(data, (tuple, list, np.ndarray)):
+        if len(np.shape(data)) > 1:
+            return "tensor"
+        else:
+            dtype = set(type(x) for x in data)
+            values = set(x for x in data)
+
+            if len(dtype) > 1:
+                raise ValueError("Can infer type only when data contains "
+                                 "values of a single type.")
+            dtype = dtype.pop()
+
+            if np.issubdtype(dtype, np.str_):
+                if len(values) < ncat:
+                    return "category"
+                else:
+                    return "string"
+            elif np.issubdtype(dtype, np.integer):
+                if values == {0, 1}:
+                    return "binary"
+                elif len(values) < ncat:
+                    return "category"
+                else:
+                    return "integer"
+            elif np.issubdtype(dtype, np.floating):
+                return "scalar"
+            else:
+                return str(dtype)
+    elif isinstance(data, pd.Series):
+        return infer_types(data.values)
+    elif isinstance(data, (dict, pd.DataFrame)):
+        dtypes = {col: infer_types(val) for col, val in data.items()}
+
+        if dict_type is True:
+            return exchange_keyval(dtypes)
+        else:
+            return dtypes
+
+    else:
+        return str(type(data))
+
+
 def tensor_name(dim, channels=False):
     """
     Tensor name from its dimension.
@@ -488,22 +572,6 @@ def array_to_dict(array, shapes):
     array_list = split_array(array, list(shapes.values()))
 
     return {k: a for k, a in zip(shapes.keys(), array_list)}
-
-
-def exchange_list_dict(data):
-    """
-    Transform a list of dicts into a dict of lists.
-    """
-
-    dic = {}
-
-    for d in data:
-        for k, v in d.items():
-            if k not in dic:
-                dic[k] = []
-            dic[k].append(v)
-
-    return dic
 
 
 def average(ensemble):
