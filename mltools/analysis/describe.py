@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from mltools.data import datatools
+from mltools.data import datatools as dt
 
 from mltools.analysis.logger import Logger
 from mltools.data.structure import DataStructure
@@ -295,9 +295,9 @@ def correlations(data, features=None, targets=None, method="pearson",
             features = data.columns.to_list()
         elif isinstance(data, dict):
             # keep only numerical features from dict
-            features = [k for k, t
-                        in datatools.infer_types(data, ncat=0).items()
-                        if t in ("scalar", "integer", "binary")]
+            features = dt.filter_features(data,
+                                          ("scalar", "integer", "binary"),
+                                          ncat=0)
         else:
             raise TypeError("Cannot study correlation for object `{}`."
                             .format(type(data)))
@@ -372,7 +372,7 @@ def correlation_text(corr):
     if features == targets:
         # write coefficients as table
 
-        names = datatools.equal_length_names(features, align="right")
+        names = dt.equal_length_names(features, align="right")
 
         for i, (name, col) in enumerate(zip(names, features)):
             text += name
@@ -382,7 +382,7 @@ def correlation_text(corr):
     else:
         # write coefficients as list
 
-        names = datatools.equal_length_names(dict(zip(features, features)),
+        names = dt.equal_length_names(dict(zip(features, features)),
                                              align="left")
         item_fmt = "  ∝ {}  " + corr_fmt
 
@@ -398,7 +398,7 @@ def correlation_text(corr):
     return text
 
 
-def importances(data, inputs=None, outputs=None, filename="", logtime=False,
+def importances(data, outputs, inputs=None, filename="", logtime=False,
                 logger=None):
     """
     Compute input importances for outputs from random forest.
@@ -413,7 +413,27 @@ def importances(data, inputs=None, outputs=None, filename="", logtime=False,
 
     importances = {}
 
+    if isinstance(outputs, str):
+        outputs = [outputs]
+
+    # keep only numerical features
+    num_inputs = dt.filter_features(data, ("scalar", "integers", "binary"),
+                                    ncat=0)
+
+    if inputs is None:
+        # if not inputs is given, take all columns from data except outputs
+        inputs = [c for c in num_inputs if c not in outputs]
+    else:
+        inputs = [c for c in inputs if c in num_inputs]
+
     struct = DataStructure(inputs, infer=data)
+
+    # remove NaN values
+    if isinstance(data, pd.DataFrame):
+        data = data.dropna(how='any')
+    # TODO: extend to dict
+
+    # TODO: add random forest for classification
 
     for o in outputs:
         model = RandomForest(inputs=struct, outputs=DataStructure([o]),
@@ -452,7 +472,7 @@ def importance_text(importances):
     text = ""
 
     targets = importances.index.to_list()
-    names = datatools.equal_length_names(targets, align="left")
+    names = dt.equal_length_names(targets, align="left")
 
     for name, val in zip(names, importances):
         text += item_fmt.format(name, val)

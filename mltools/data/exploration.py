@@ -9,7 +9,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
-from mltools.data import datatools
+from mltools.data import datatools as dt
 from mltools.analysis import describe
 
 from mltools.analysis.logger import Logger
@@ -74,7 +74,7 @@ class DataExploration:
                             .format(type(data)))
 
         if isinstance(data, dict):
-            data = datatools.dict_to_dataframe(data)
+            data = dt.dict_to_dataframe(data)
 
         data = data[features]
 
@@ -108,6 +108,11 @@ class DataExploration:
 
         return text
 
+    def find_nan(self, data):
+        # TODO: extend to dict
+
+        return data[data.isnull().any(axis=1)]
+
     def distribution(self, data, features=None, bins=None, figsize=(20, 15),
                      filename="", logtime=False):
 
@@ -127,7 +132,7 @@ class DataExploration:
 
         return fig
 
-    def scatter_plots(self, data, inputs=None, outputs=None):
+    def scatter(self, data, outputs=None, inputs=None):
 
         # data.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
         # pd.plotting.scatter_matrix(data)
@@ -160,7 +165,7 @@ class DataExploration:
 
         return corr, fig, text
 
-    def importances(self, data, inputs=None, outputs=None, filename="",
+    def importances(self, data, outputs, inputs=None, filename="",
                     logtime=False):
         """
         Compute input importances for outputs from random forest.
@@ -168,7 +173,7 @@ class DataExploration:
         Filename must have no extension.
         """
 
-        importances, fig = describe.importances(data, inputs, outputs)
+        importances, fig = describe.importances(data, outputs, inputs)
 
         # TODO: could make heat map also
 
@@ -183,7 +188,7 @@ class DataExploration:
 
         if filename != "" and self.logger is not None:
             self.logger.save_fig(fig, filename + ".pdf", logtime)
-            self.logger.save_text(text, filename + ".txt", logtime)
+            self.logger.save_json(importances, filename + ".json", logtime)
 
         return importances, fig, text
 
@@ -193,8 +198,14 @@ class DataExploration:
 
         pass
 
-    def summary_io(self, data, inputs=None, outputs=None, filename="",
+    def summary_io(self, data, outputs, inputs=None, filename="",
                    logtime=False, display_text=False, display_fig=False):
+
+        # TODO: add save_individual (to save each figures independently)
+
+        # if not inputs is given, take all columns from data except outputs
+        if inputs is None:
+            inputs = [c for c in data.columns if c not in outputs]
 
         fulltext = "# Dataset: analysis of inputs and outputs\n\n"
         figs = []
@@ -225,7 +236,7 @@ class DataExploration:
             fulltext += text
             fulltext += "\n\n"
 
-        _, fig, text = self.importances(data, inputs, outputs)
+        _, fig, text = self.importances(data, outputs, inputs)
         text = "## Feature importances (random forests)\n\n" + text
 
         figs += [fig, Logger.text_to_fig(text)]
@@ -245,21 +256,33 @@ class DataExploration:
                 display_text=False, display_fig=False,
                 filename="", logtime=False):
 
+        # TODO: add save_individual (to save each figures independently)
+
         fulltext = "# Dataset: Exploratory Data Analysis\n\n"
         figs = []
 
-        fulltext += "## Informations\n\n"
-        fulltext += self.info(data, features)
+        # general information
+        text = "## Informations\n\n"
+        text += self.info(data, features)
         fulltext += "\n\n"
 
-        fulltext += "## Statistics (numerical)\n\n"
-        fulltext += self.describe(data, features)
+        figs.append(Logger.text_to_fig(text))
+        fulltext += text
         fulltext += "\n\n\n"
 
+        # statistics
+        text = "## Statistics (numerical)\n\n"
+        text += self.describe(data, features)
+
+        figs.append(Logger.text_to_fig(text))
+        fulltext += text
+        fulltext += "\n\n\n"
+
+        # variable distribution
         fig = self.distribution(data, features, figsize=(10, 10))
         figs.append(fig)
 
-        # TODO: take only numerical values
+        #
         _, fig, text = self.correlations(data, features)
         figs.append(fig)
         text = "## Correlations\n\n" + text

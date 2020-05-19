@@ -151,6 +151,19 @@ def infer_types(data, ncat=10, dict_type=False):
         return str(type(data))
 
 
+def filter_features(data, types, ncat=0):
+    return [k for k, t in infer_types(data, ncat=ncat).items() if t in types]
+
+
+def filter_on_types(data, types, ncat=0):
+    cols = filter_features(data, types, ncat)
+
+    if isinstance(data, pd.DataFrame):
+        return data[cols]
+    elif isinstance(data, dict):
+        return {k: v for k, v in data.items() if k in cols}
+
+
 def dict_to_dataframe(dic):
     """
     Convert a dict to a dataframe.
