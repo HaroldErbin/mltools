@@ -457,6 +457,10 @@ def importances(data, outputs, inputs=None, filename="", logtime=False,
 
     ax.legend()
 
+    sns.despine(fig=fig)
+
+    plt.close(fig)
+
     if logger is not None:
         logger.save_fig(fig, filename, logtime)
 

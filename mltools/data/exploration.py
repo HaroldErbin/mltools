@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from mltools.data import datatools as dt
 from mltools.analysis import describe
@@ -113,7 +114,7 @@ class DataExploration:
 
         return data[data.isnull().any(axis=1)]
 
-    def distribution(self, data, features=None, bins=None, figsize=(20, 15),
+    def distributions(self, data, features=None, bins=None, figsize=(20, 15),
                      filename="", logtime=False):
 
         features, _ = self._prep_features(features, data=data)
@@ -125,6 +126,8 @@ class DataExploration:
 
         fig = axes[0, 0].figure
 
+        sns.despine(fig=fig)
+
         if self.logger is not None:
             self.logger.save_fig(fig, filename=filename, logtime=logtime)
 
@@ -132,12 +135,26 @@ class DataExploration:
 
         return fig
 
-    def scatter(self, data, outputs=None, inputs=None):
+    def scatter(self, data, outputs, inputs=None):
 
-        # data.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
-        # pd.plotting.scatter_matrix(data)
+        if isinstance(outputs, str):
+            outputs = [outputs]
 
-        pass
+        if isinstance(inputs, str):
+            inputs = [inputs]
+
+        # TODO: extend to dict
+        if inputs is None:
+            inputs = [c for c in data.columns if c not in outputs]
+
+        grid = sns.pairplot(data, y_vars=inputs, x_vars=outputs, markers=".",
+                            plot_kws={"alpha": 0.5})
+
+        fig = grid.fig
+
+        plt.close(fig)
+
+        return fig
 
     def correlations(self, data, features=None, targets=None,
                      method="pearson", cmap=None, y_rot=45,
@@ -210,32 +227,37 @@ class DataExploration:
         fulltext = "# Dataset: analysis of inputs and outputs\n\n"
         figs = []
 
-        corr, fig = describe.correlations(data, inputs, outputs)
-        text = describe.correlation_text(corr)
+        # scatter plots
+        fig = self.scatter(data, outputs, inputs)
+        figs.append(fig)
+
+        # correlations between inputs and outputs
+        _, fig, text = self.correlations(data, inputs, outputs)
         text = "## Correlations between inputs and outputs\n\n" + text
 
         figs += [fig, Logger.text_to_fig(text)]
         fulltext += text
         fulltext += "\n\n"
 
+        # correlations between inputs
         if len(inputs) > 1:
-            corr, fig = describe.correlations(data, inputs)
-            text = describe.correlation_text(corr)
+            _, fig, text = self.correlations(data, inputs)
             text = "## Correlations between inputs\n\n" + text
 
             figs += [fig, Logger.text_to_fig(text)]
             fulltext += text
             fulltext += "\n\n"
 
+        # correlations between outputs
         if len(outputs) > 1:
-            corr, fig = describe.correlations(data, outputs)
-            text = describe.correlation_text(corr)
+            _, fig, text = self.correlations(data, outputs)
             text = "## Correlations between outputs\n\n" + text
 
             figs += [fig, Logger.text_to_fig(text)]
             fulltext += text
             fulltext += "\n\n"
 
+        # relative importances of inputs
         _, fig, text = self.importances(data, outputs, inputs)
         text = "## Feature importances (random forests)\n\n" + text
 
@@ -279,14 +301,14 @@ class DataExploration:
         fulltext += "\n\n\n"
 
         # variable distribution
-        fig = self.distribution(data, features, figsize=(10, 10))
+        fig = self.distributions(data, features, figsize=(10, 10))
         figs.append(fig)
 
-        #
+        # variable correlations
         _, fig, text = self.correlations(data, features)
-        figs.append(fig)
         text = "## Correlations\n\n" + text
-        figs.append(Logger.text_to_fig(text))
+
+        figs += [fig, Logger.text_to_fig(text)]
         fulltext += text
         fulltext += "\n"
 
