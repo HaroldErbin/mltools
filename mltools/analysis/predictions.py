@@ -520,7 +520,7 @@ class Predictions:
 
     def summary(self, mode="", training_metrics=None, signed_errors=True,
                 density=True, bins=None, log=False,
-                filename="", logtime=True, show=False, add_figs=None):
+                filename="", logtime=True, show=False, extra_figs=None):
 
         # TODO: add computation of errors
 
@@ -612,8 +612,8 @@ class Predictions:
         figs.append(self.logger.text_to_fig(model_text))
 
         # additional figurescreated outside the function
-        if add_figs is not None:
-            figs += add_figs
+        if extra_figs is not None:
+            figs += extra_figs
 
         if self.logger is not None:
             self.logger.save_figs(figs, pdf_filename, logtime)

@@ -12,12 +12,14 @@ import seaborn as sns
 from mltools.data import datatools
 
 from mltools.analysis.logger import Logger
+from mltools.data.structure import DataStructure
+from mltools.models.forest import RandomForest
 
 
 def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
                  density=True, bins=None, range=None, log=False,
-                 xlabel=None, label=None, logger=None, filename="",
-                 logtime=False):
+                 xlabel=None, label=None, filename="", logtime=False,
+                 logger=None):
     """
     Plot the distribution of a variable.
 
@@ -257,8 +259,8 @@ def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
 
 
 def correlations(data, features=None, targets=None, method="pearson",
-                 cmap=None, y_rot=45, logger=None, filename="",
-                 logtime=False):
+                 cmap=None, y_rot=45, filename="", logtime=False,
+                 logger=None):
     """
     Compute and plot correlations between variables.
 
@@ -302,7 +304,7 @@ def correlations(data, features=None, targets=None, method="pearson",
 
     all_features += features
 
-    if targets is not None:
+    if targets is not None and len(targets) > 0:
         all_features += targets
     else:
         targets = features
@@ -339,9 +341,13 @@ def correlations(data, features=None, targets=None, method="pearson",
     ax.set_xticks(np.arange(len(targets)))
     ax.set_xticklabels(targets, rotation=y_rot, ha=ha)
 
+    ax.tick_params(bottom=False)
+
     # from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     fig.colorbar(pcm, ax=ax)
+
+    sns.despine(fig=fig, top=True, bottom=True, left=True, right=True)
 
     plt.close(fig)
 
@@ -361,12 +367,12 @@ def correlation_text(corr):
     features = corr.index.tolist()
     targets = corr.columns.tolist()
 
-    names = datatools.equal_length_names(features, align="right")
-
     text = ""
 
     if features == targets:
         # write coefficients as table
+
+        names = datatools.equal_length_names(features, align="right")
 
         for i, (name, col) in enumerate(zip(names, features)):
             text += name
@@ -376,15 +382,81 @@ def correlation_text(corr):
     else:
         # write coefficients as list
 
+        names = datatools.equal_length_names(dict(zip(features, features)),
+                                             align="left")
         item_fmt = "  ∝ {}  " + corr_fmt
 
         for target in targets:
             text += "- {}\n".format(target)
-            text += "\n".join(item_fmt.format(k, v)
-                              for k, v in corr[target].items())
+            text += "\n".join(item_fmt.format(name, corr[target][col])
+                              for name, col in names.items())
 
             text += "\n\n"
 
-        text = text[:-2]
+    text = text.strip("\n")
+
+    return text
+
+
+def importances(data, inputs=None, outputs=None, filename="", logtime=False,
+                logger=None):
+    """
+    Compute input importances for outputs from random forest.
+    """
+
+    # TODO: generalize to vector/matrix inputs (sum importances)
+    # TODO: generalize when some inputs are categories (insert all names
+    #       from the category structure)
+    # TODO: generalize when outputs is not a scalar
+
+    # TODO: improve plot display
+
+    importances = {}
+
+    struct = DataStructure(inputs, infer=data)
+
+    for o in outputs:
+        model = RandomForest(inputs=struct, outputs=DataStructure([o]),
+                             method="reg")
+        model.fit(data)
+
+        importances[o] = model.model.feature_importances_
+
+    importances = pd.DataFrame(importances, index=inputs)
+
+    fig, ax = plt.subplots()
+
+    for target in importances:
+        ax.plot(importances[target], label=target, marker='.')
+
+    ax.set_xticks(np.arange(len(inputs)))
+    ax.set_xticklabels(inputs, rotation=45, ha="right")
+
+    ax.set_ylabel("importance")
+    ax.set_ylim(ymin=0, ymax=1)
+
+    ax.legend()
+
+    if logger is not None:
+        logger.save_fig(fig, filename, logtime)
+
+    return importances, fig
+
+
+def importance_text(importances):
+    """
+    Convert importances series to text.
+    """
+
+    item_fmt = "- {}  {:8.3f}\n"
+    text = ""
+
+    targets = importances.index.to_list()
+    names = datatools.equal_length_names(targets, align="left")
+
+    for name, val in zip(names, importances):
+        text += item_fmt.format(name, val)
+
+    text = text.strip("\n")
 
     return text

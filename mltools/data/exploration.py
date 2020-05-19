@@ -9,11 +9,11 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from mltools.data import datatools
+from mltools.analysis import describe
+
 from mltools.analysis.logger import Logger
-
 from mltools.data.structure import DataStructure
-
-from mltools.models.forest import RandomForest
 
 
 class DataExploration:
@@ -27,6 +27,7 @@ class DataExploration:
 
     def __init__(self, inputs=None, outputs=None, logger=None):
         # if no inputs, use all columns except the ones in outputs
+        # this is done in the `_prepare` method
 
         if inputs is None:
             self.inputs = []
@@ -42,31 +43,47 @@ class DataExploration:
 
         self.logger = logger
 
-    def _prepare(self, data, features):
-        features = features or self.features
+    def _prep_features(self, inputs=None, outputs=None, data=None):
 
-        if isinstance(features, str):
-            features = [features]
+        inputs = inputs or self.inputs
+        outputs = outputs or self.outputs
 
-        if features is None or len(features) == 0:
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        if isinstance(outputs, str):
+            outputs = [outputs]
+
+        if len(inputs) == 0 and data is not None:
             if isinstance(data, dict):
-                features = list(data.keys())
+                inputs = list(data.keys())
             elif isinstance(data, pd.DataFrame):
-                features = list(data.columns)
+                inputs = data.columns.to_list()
 
-        if isinstance(data, dict):
-            data = pd.DataFrame({k: v for k, v in data.items()
-                                 if k in features})
-        elif isinstance(data, pd.DataFrame):
-            data = data[features]
-        else:
+        if outputs is not None:
+            # remove features in `inputs` if they are already in `outputs`
+            # this helps in the case where the inputs are infered from the
+            # data
+            inputs = [f for f in inputs if f not in outputs]
+
+        return inputs, outputs
+
+    def _prep_data(self, data, features):
+
+        if not isinstance(data, (dict, pd.DataFrame)):
             raise TypeError("Data with type `{}` cannot be explored."
                             .format(type(data)))
 
-        return data, features
+        if isinstance(data, dict):
+            data = datatools.dict_to_dataframe(data)
+
+        data = data[features]
+
+        return data
 
     def info(self, data, features=None, filename="", logtime=False):
-        data, features = self._prepare(data, features)
+
+        features, _ = self._prep_features(features, data=data)
+        data = self._prep_data(data, features)
 
         with io.StringIO() as buffer:
             data.info(buf=buffer)
@@ -78,9 +95,11 @@ class DataExploration:
         return text
 
     def describe(self, data, features=None, filename="", logtime=False):
-        # use include to also describe categories, string (separate display)
 
-        data, features = self._prepare(data, features)
+        features, _ = self._prep_features(features, data=data)
+        data = self._prep_data(data, features)
+
+        # use include to also describe categories, string (separate display)
 
         text = str(data.describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9]))
 
@@ -92,9 +111,10 @@ class DataExploration:
     def distribution(self, data, features=None, bins=None, figsize=(20, 15),
                      filename="", logtime=False):
 
-        data, features = self._prepare(data, features)
+        features, _ = self._prep_features(features, data=data)
+        data = self._prep_data(data, features)
 
-        bins = bins or max(50, Logger.find_bins(data))
+        bins = bins or min(50, Logger.find_bins(data))
 
         axes = data.hist(bins=bins, figsize=figsize)
 
@@ -109,103 +129,36 @@ class DataExploration:
 
     def scatter_plots(self, data, inputs=None, outputs=None):
 
+        # data.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
+        # pd.plotting.scatter_matrix(data)
+
         pass
 
-#        data.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
-#        pd.plotting.scatter_matrix(data)
-
-    @staticmethod
-    def _corr_text(corr, xlabels, ylabels=None):
-
-        if ylabels is None:
-            ylabels = xlabels
-
-        text = ""
-        mat = []
-
-        for x in xlabels:
-            c = corr[x][ylabels]
-            mat.append(c.values)
-
-            text += "- Correlations for: {}\n\n".format(x)
-            for k, v in c.sort_values(ascending=False).iteritems():
-                text += "{:<25} {:<+.3f}\n".format(k, v)
-            text += "\n"
-
-        return text, mat
-
-    @staticmethod
-    def _corr_fig(corr, xlabels, ylabels=None):
-
-        if ylabels is None:
-            ylabels = xlabels
-
-        axes = plt.matshow(corr, vmin=-1, vmax=1)
-        plt.colorbar()
-
-        fig = axes.get_figure()
-
-        # TODO: put ticks below?
-        ax = fig.axes[0]
-
-        ax.set_xticks(np.arange(len(xlabels)))
-        ax.set_xticklabels(xlabels, rotation=45)
-
-        ax.set_yticks(np.arange(len(ylabels)))
-        ax.set_yticklabels(ylabels)
-
-        return fig
-
-    def correlations(self, data, features=None, filename="", logtime=False):
+    def correlations(self, data, features=None, targets=None,
+                     method="pearson", cmap=None, y_rot=45,
+                     filename="", logtime=False):
         """
         Compute correlations between a set of features.
 
-        The filename should have no extension.
+        Filename must have no extension.
         """
 
-        data, features = self._prepare(data, features)
+        features, targets = self._prep_features(features, targets, data=data)
+        data = self._prep_data(data, features + targets)
 
-        corr = data.corr()
+        corr, fig = describe.correlations(data, features, targets, method,
+                                          cmap, y_rot, logger=self.logger)
+        text = describe.correlation_text(corr)
 
-        fig = self._corr_fig(corr, features)
-        text, _ = self._corr_text(corr, features)
+        # TODO: save as json
 
-        if self.logger is not None:
+        if filename != "" and self.logger is not None:
             self.logger.save_fig(fig, filename + ".pdf'", logtime)
-            self.logger.save_text(text, filename + ".txt", logtime)
+            # self.logger.save_text(text, filename + ".txt", logtime)
 
         plt.close()
 
-        return text, fig
-
-    def correlations_io(self, data, inputs=None, outputs=None, filename="",
-                        logtime=False):
-        """
-        Compute correlations between inputs and outputs.
-
-        The filename should have no extension.
-        """
-
-        features = []
-
-        inputs = inputs or self.inputs
-        outputs = outputs or self.outputs
-
-        if len(inputs) == 0 or len(outputs) == 0:
-            raise ValueError("Inputs and outputs must be non-empty.")
-
-        data, features = self._prepare(data, inputs + outputs)
-
-        corr = data.corr()
-
-        text, mat = self._corr_text(corr, outputs, inputs)
-        fig = self._corr_fig(np.c_[mat].T, outputs, inputs)
-
-        if self.logger is not None:
-            self.logger.save_text(text, filename + ".txt", logtime)
-            self.logger.save_fig(fig, filename + ".pdf", logtime)
-
-        return text, fig
+        return corr, fig, text
 
     def importances(self, data, inputs=None, outputs=None, filename="",
                     logtime=False):
@@ -215,82 +168,68 @@ class DataExploration:
         Filename must have no extension.
         """
 
-        # TODO: generalize to vector/matrix inputs (sum importances)
-        # TODO: generalize when some inputs are categories
-        # TODO: try to generalize when outputs is not a scalar
+        importances, fig = describe.importances(data, inputs, outputs)
 
-        # TODO: improve plot display
+        # TODO: could make heat map also
 
-        importances = {}
         text = ""
-        figs = []
 
-        struct = DataStructure(inputs, infer=data)
-
-        for o in outputs:
-            model = RandomForest(inputs=struct, outputs=DataStructure([o]),
-                                 method="reg")
-            model.fit(data)
-
-            importances[o] = model.model.feature_importances_
-
-            text += "- Importances for: {}\n\n".format(o)
-            for k, v in zip(inputs, importances[o]):
-                text += "{:<25} {:<+.3f}\n".format(k, v)
+        for target, imp in importances.items():
+            text += "- {}\n  ".format(target)
+            text += describe.importance_text(imp).replace("\n-", "\n  -")
             text += "\n"
 
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+        # TODO: save as json
 
-            ax.plot(importances[o])
-
-            ax.set_xticks(np.arange(len(inputs)))
-            ax.set_xticklabels(inputs, rotation=45)
-            ax.set_ylabel("Importance for: {}".format(o))
-            ax.set_ylim(ymin=0, ymax=1)
-
-            figs.append(fig)
-
-        if self.logger is not None:
+        if filename != "" and self.logger is not None:
+            self.logger.save_fig(fig, filename + ".pdf", logtime)
             self.logger.save_text(text, filename + ".txt", logtime)
-            self.logger.save_figs(figs, filename + ".pdf", logtime)
 
-        return importances, text, figs
+        return importances, fig, text
 
     def baseline(self, data, inputs=None, outputs=None, models=None):
-        # if model is None, run: linear regression, SVM, basic neural network
-        # random forest
+        # if model is None, run with simple parameters:
+        # linear regression, SVM, basic neural network, random forest
 
         pass
 
     def summary_io(self, data, inputs=None, outputs=None, filename="",
                    logtime=False, display_text=False, display_fig=False):
 
-        inputs = inputs or self.inputs
-        outputs = outputs or self.outputs
-
-        fulltext = ""
+        fulltext = "# Dataset: analysis of inputs and outputs\n\n"
         figs = []
 
-        text, fig = self.correlations(data, inputs)
-        text = "# Correlations between inputs\n\n" + text
-        fulltext += text
-        figs += [self.logger.text_to_fig(text), fig]
+        corr, fig = describe.correlations(data, inputs, outputs)
+        text = describe.correlation_text(corr)
+        text = "## Correlations between inputs and outputs\n\n" + text
 
-        text, fig = self.correlations(data, outputs)
-        text = "# Correlations between outputs\n\n" + text
+        figs += [fig, Logger.text_to_fig(text)]
         fulltext += text
-        figs += [self.logger.text_to_fig(text), fig]
+        fulltext += "\n\n"
 
-        text, fig = self.correlations_io(data, inputs, outputs)
-        text = "# Correlations between inputs and outputs\n\n" + text
-        fulltext += text
-        figs += [self.logger.text_to_fig(text), fig]
+        if len(inputs) > 1:
+            corr, fig = describe.correlations(data, inputs)
+            text = describe.correlation_text(corr)
+            text = "## Correlations between inputs\n\n" + text
 
-        _, text, fig = self.importances(data, inputs, outputs)
-        text = "# Input importance for outputs\n\n" + text
+            figs += [fig, Logger.text_to_fig(text)]
+            fulltext += text
+            fulltext += "\n\n"
+
+        if len(outputs) > 1:
+            corr, fig = describe.correlations(data, outputs)
+            text = describe.correlation_text(corr)
+            text = "## Correlations between outputs\n\n" + text
+
+            figs += [fig, Logger.text_to_fig(text)]
+            fulltext += text
+            fulltext += "\n\n"
+
+        _, fig, text = self.importances(data, inputs, outputs)
+        text = "## Feature importances (random forests)\n\n" + text
+
+        figs += [fig, Logger.text_to_fig(text)]
         fulltext += text
-        figs += [self.logger.text_to_fig(text)] + fig
 
         if display_text is True:
             print(fulltext)
@@ -298,7 +237,7 @@ class DataExploration:
         if display_fig is True:
             raise NotImplementedError
 
-        if self.logger is not None:
+        if filename != "" and self.logger is not None:
             self.logger.save_figs(figs, filename + ".pdf", logtime)
             self.logger.save_text(fulltext, filename + ".txt", logtime)
 
@@ -306,28 +245,39 @@ class DataExploration:
                 display_text=False, display_fig=False,
                 filename="", logtime=False):
 
-        fulltext = ""
+        fulltext = "# Dataset: Exploratory Data Analysis\n\n"
         figs = []
 
-        fulltext += "# Dataset informations\n"
+        fulltext += "## Informations\n\n"
         fulltext += self.info(data, features)
-        fulltext += "\n"
+        fulltext += "\n\n"
 
-        fulltext += "# Dataset statistics (numerical)"
+        fulltext += "## Statistics (numerical)\n\n"
         fulltext += self.describe(data, features)
+        fulltext += "\n\n\n"
 
         fig = self.distribution(data, features, figsize=(10, 10))
         figs.append(fig)
 
         # TODO: take only numerical values
-        fig = self.correlations(data, features)
+        _, fig, text = self.correlations(data, features)
         figs.append(fig)
+        text = "## Correlations\n\n" + text
+        figs.append(Logger.text_to_fig(text))
+        fulltext += text
+        fulltext += "\n"
 
         fulltext += extra_text
 
         if extra_figs is not None:
             figs += extra_figs
 
-        if self.logger is not None:
+        if display_text is True:
+            print(fulltext)
+
+        if display_fig is True:
+            raise NotImplementedError
+
+        if filename != "" and self.logger is not None:
             self.logger.save_figs(figs, filename + ".pdf", logtime)
             self.logger.save_text(fulltext, filename + ".txt", logtime)

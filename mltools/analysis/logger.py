@@ -15,6 +15,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+import seaborn as sns
 
 
 # TODO: prevent display of graphs
@@ -61,7 +62,7 @@ class Logger:
     styles = STYLES
 
     def __init__(self, path="", logtime="folder",
-                 logtime_fmt="%Y-%m-%d-%H%M%S"):
+                 logtime_fmt="%Y-%m-%d-%H%M%S", palette="muted"):
         """
         Inits Logger
 
@@ -95,6 +96,8 @@ class Logger:
         # set logtime to a fixed value, which is used for all files
         self.logtime = time.strftime(logtime_fmt)
         self.logtime_fmt = logtime_fmt
+
+        sns.set_palette(palette)
 
     def __repr__(self):
         return "<Logger, base = {}, logtime = {}>".format(self.path,
@@ -276,7 +279,8 @@ class Logger:
         with open(filename, 'w') as f:
             json.dump(data, f, indent=4)
 
-    def text_to_fig(self, text, filename="", logtime=True):
+    @staticmethod
+    def text_to_fig(text, filename="", logtime=True):
         """
         Convert text to figure.
 
@@ -303,7 +307,7 @@ class Logger:
         ax.margins(0, 0)
         fig.tight_layout(pad=10)
 
-        self.save_fig(fig, filename=filename, logtime=logtime)
+        plt.close(fig)
 
         return fig
 

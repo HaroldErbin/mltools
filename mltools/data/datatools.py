@@ -137,9 +137,10 @@ def infer_types(data, ncat=10, dict_type=False):
             else:
                 return str(dtype)
     elif isinstance(data, pd.Series):
-        return infer_types(data.values)
+        return infer_types(data.values, ncat=ncat)
     elif isinstance(data, (dict, pd.DataFrame)):
-        dtypes = {col: infer_types(val) for col, val in data.items()}
+        dtypes = {col: infer_types(val, ncat=ncat)
+                  for col, val in data.items()}
 
         if dict_type is True:
             return exchange_keyval(dtypes)
@@ -148,6 +149,25 @@ def infer_types(data, ncat=10, dict_type=False):
 
     else:
         return str(type(data))
+
+
+def dict_to_dataframe(dic):
+    """
+    Convert a dict to a dataframe.
+
+    Columns corresponding to types which cannot be converted are silently
+    ignored.
+    """
+
+    # TODO: convert also tensors
+    # TODO: convert other types
+
+    features = [k for k, t in infer_types(dic, ncat=0).items()
+                if t in ("scalar", "integer", "binary", "string")]
+
+    df = pd.DataFrame({k: v for k, v in dic.items() if k in features})
+
+    return df
 
 
 def tensor_name(dim, channels=False):
