@@ -304,8 +304,8 @@ class Logger:
         ax.text(0, 1, text, fontfamily='monospace', verticalalignment='center')
         ax.set_axis_off()
 
-        ax.margins(0, 0)
-        fig.tight_layout(pad=10)
+        # ax.margins(0, 0)
+        fig.tight_layout(pad=1)
 
         plt.close(fig)
 

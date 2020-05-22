@@ -398,27 +398,21 @@ def correlation_text(corr):
     return text
 
 
-def importances(data, outputs, inputs=None, filename="", logtime=False,
-                logger=None):
+def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
+                mode="dataframe", filename="", logtime=False, logger=None):
     """
     Compute input importances for outputs from random forest.
     """
 
-    # TODO: generalize to vector/matrix inputs (sum importances)
-    # TODO: generalize when some inputs are categories (insert all names
-    #       from the category structure)
+    # TODO: when inputs are categories, insert all names using category struct
     # TODO: generalize when outputs is not a scalar
-
-    # TODO: improve plot display
-
-    importances = {}
 
     if isinstance(outputs, str):
         outputs = [outputs]
 
     # keep only numerical features
-    num_inputs = dt.filter_features(data, ("scalar", "integers", "binary"),
-                                    ncat=0)
+    num_types = ("scalar", "integer", "binary", "tensor")
+    num_inputs = dt.filter_features(data, num_types, ncat=0)
 
     if inputs is None:
         # if not inputs is given, take all columns from data except outputs
@@ -426,30 +420,44 @@ def importances(data, outputs, inputs=None, filename="", logtime=False,
     else:
         inputs = [c for c in inputs if c in num_inputs]
 
-    struct = DataStructure(inputs, infer=data)
+    # TODO: if both onehot and ord are present, keep the first only
 
     # remove NaN values
+    # TODO: extend to dict
     if isinstance(data, pd.DataFrame):
         data = data.dropna(how='any')
-    # TODO: extend to dict
 
     # TODO: add random forest for classification
 
+    model_params = {"n_estimators": n_estimators}
+
+    struct = DataStructure(inputs, infer=data)
+    importances = {}
+
     for o in outputs:
         model = RandomForest(inputs=struct, outputs=DataStructure([o]),
-                             method="reg")
+                             method="reg", model_params=model_params)
         model.fit(data)
 
         importances[o] = model.model.feature_importances_
 
-    importances = pd.DataFrame(importances, index=inputs)
+        if sum_tensor is True:
+            named = struct.inverse_transform(importances[o].reshape(1, -1))
+            importances[o] = np.array([np.sum(v) for v in named.values()])
 
+    # plot importance graph
     fig, ax = plt.subplots()
 
     for target in importances:
         ax.plot(importances[target], label=target, marker='.')
 
-    ax.set_xticks(np.arange(len(inputs)))
+    if sum_tensor is True:
+        ax.set_xticks(np.arange(len(inputs)))
+    else:
+        # for a tensor, put just one tick at the first component
+        ticks = [x[0] for x in dt.linear_indices(struct.shapes.values())]
+        ax.set_xticks(ticks)
+
     ax.set_xticklabels(inputs, rotation=45, ha="right")
 
     ax.set_ylabel("importance")
@@ -464,6 +472,29 @@ def importances(data, outputs, inputs=None, filename="", logtime=False,
     if logger is not None:
         logger.save_fig(fig, filename, logtime)
 
+    # convert data to dict with all inputs name or dataframe if requested
+    if sum_tensor is True:
+        # if components have been summed over, consider only dataframe
+        if mode == "dataframe":
+            importances = pd.DataFrame(importances, index=inputs)
+
+    else:
+        if mode in ("dict", "dataframe"):
+
+            for o, imp in importances.items():
+                val = struct.inverse_transform(imp.reshape(1, -1))
+                for k, v in val.items():
+                    s = np.shape(v)
+                    if s == (1,):
+                        val[k] = v.item()
+                    elif len(s) > 1 and s[0] == 1:
+                        val[k] = v.reshape(*s[1:])
+                importances[o] = val
+
+        if mode == "dataframe":
+            importances = pd.DataFrame({o: pd.Series(v)
+                                        for o, v in importances.items()})
+
     return importances, fig
 
 
@@ -472,14 +503,26 @@ def importance_text(importances):
     Convert importances series to text.
     """
 
-    item_fmt = "- {}  {:8.3f}\n"
+    float_fmt = "  {:.3f}"
+    item_fmt = "- {}   {}\n"
     text = ""
 
     targets = importances.index.to_list()
     names = dt.equal_length_names(targets, align="left")
 
+    array_padding = " " * (max(map(len, names)) + 2 + 3)
+
     for name, val in zip(names, importances):
-        text += item_fmt.format(name, val)
+        if isinstance(val, (tuple, list, np.ndarray)):
+            val_str = np.array_str(val, precision=3, suppress_small=True)
+            if len(np.shape(val)) > 1:
+                val_str = val_str.replace("\n", "\n" + array_padding)
+            else:
+                val_str = " " + val_str
+        else:
+            val_str = float_fmt.format(val)
+
+        text += item_fmt.format(name, val_str)
 
     text = text.strip("\n")
 

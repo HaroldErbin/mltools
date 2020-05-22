@@ -109,11 +109,14 @@ def infer_types(data, ncat=10, dict_type=False):
     """
 
     if isinstance(data, (tuple, list, np.ndarray)):
-        if len(np.shape(data)) > 1:
+        shapes = data_shapes(data)
+        if len(shapes) > 1:
+            return "object"
+        elif shapes != [()]:
             return "tensor"
         else:
             dtype = set(type(x) for x in data)
-            values = set(x for x in data)
+            values = np.unique([x for x in data])
 
             if len(dtype) > 1:
                 raise ValueError("Can infer type only when data contains "
@@ -126,7 +129,7 @@ def infer_types(data, ncat=10, dict_type=False):
                 else:
                     return "string"
             elif np.issubdtype(dtype, np.integer):
-                if values == {0, 1}:
+                if values == [0, 1]:
                     return "binary"
                 elif len(values) <= ncat:
                     return "category"
@@ -603,6 +606,9 @@ def split_array(array, shapes):
     On the other hand, there can be problem when the sum is bigger, such that
     an error is always raised.
     """
+
+    if isinstance(array, (list, tuple)):
+        array = np.array(array)
 
     if len(array.shape) > 2:
         raise ValueError("This function works only with matrix.")

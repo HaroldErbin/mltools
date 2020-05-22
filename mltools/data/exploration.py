@@ -143,12 +143,13 @@ class DataExploration:
         if isinstance(inputs, str):
             inputs = [inputs]
 
-        # TODO: extend to dict
         if inputs is None:
-            inputs = [c for c in data.columns if c not in outputs]
+            num_types = ("scalar", "integer", "binary")
+            inputs = [c for c in dt.filter_features(data, num_types, ncat=0)
+                      if c not in outputs]
 
         grid = sns.pairplot(data, y_vars=inputs, x_vars=outputs, markers=".",
-                            plot_kws={"alpha": 0.5})
+                            plot_kws={"alpha": 0.5, "rasterized": True})
 
         fig = grid.fig
 
@@ -215,14 +216,14 @@ class DataExploration:
 
         pass
 
-    def summary_io(self, data, outputs, inputs=None, filename="",
+    def summary_io(self, data, outputs, inputs=None, dpi=150, filename="",
                    logtime=False, display_text=False, display_fig=False):
 
         # TODO: add save_individual (to save each figures independently)
 
         # if not inputs is given, take all columns from data except outputs
-        if inputs is None:
-            inputs = [c for c in data.columns if c not in outputs]
+        # if inputs is None:
+        #     inputs = [c for c in data.columns if c not in outputs]
 
         fulltext = "# Dataset: analysis of inputs and outputs\n\n"
         figs = []
@@ -240,8 +241,8 @@ class DataExploration:
         fulltext += "\n\n"
 
         # correlations between inputs
-        if len(inputs) > 1:
-            _, fig, text = self.correlations(data, inputs)
+        corr, fig, text = self.correlations(data, inputs)
+        if corr.shape != (1, 1):
             text = "## Correlations between inputs\n\n" + text
 
             figs += [fig, Logger.text_to_fig(text)]
@@ -249,8 +250,8 @@ class DataExploration:
             fulltext += "\n\n"
 
         # correlations between outputs
-        if len(outputs) > 1:
-            _, fig, text = self.correlations(data, outputs)
+        corr, fig, text = self.correlations(data, outputs)
+        if corr.shape != (1, 1):
             text = "## Correlations between outputs\n\n" + text
 
             figs += [fig, Logger.text_to_fig(text)]
@@ -271,7 +272,7 @@ class DataExploration:
             raise NotImplementedError
 
         if filename != "" and self.logger is not None:
-            self.logger.save_figs(figs, filename + ".pdf", logtime)
+            self.logger.save_figs(figs, filename + ".pdf", logtime, dpi=dpi)
             self.logger.save_text(fulltext, filename + ".txt", logtime)
 
     def summary(self, data, features=None, extra_text="", extra_figs=None,
