@@ -97,6 +97,8 @@ class DataExploration:
 
     def describe(self, data, features=None, filename="", logtime=False):
 
+        # TODO: display all columns (do not limit by display.max_columns)
+
         features, _ = self._prep_features(features, data=data)
         data = self._prep_data(data, features)
 
@@ -183,7 +185,8 @@ class DataExploration:
 
         return corr, fig, text
 
-    def importances(self, data, outputs, inputs=None, filename="",
+    def importances(self, data, outputs, inputs=None, n_estimators=20,
+                    sum_tensor=False, label_rot=45, filename="",
                     logtime=False):
         """
         Compute input importances for outputs from random forest.
@@ -191,7 +194,10 @@ class DataExploration:
         Filename must have no extension.
         """
 
-        importances, fig = describe.importances(data, outputs, inputs)
+        importances, fig = describe.importances(data, outputs, inputs,
+                                                sum_tensor=sum_tensor,
+                                                label_rot=label_rot,
+                                                n_estimators=n_estimators)
 
         # TODO: could make heat map also
 

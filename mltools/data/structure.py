@@ -199,7 +199,10 @@ class DataStructure:
         if infer_cols is not None:
             for f in self.features:
                 # first element of the data for the feature
-                first = infer[f][0]
+                if isinstance(infer, pd.DataFrame):
+                    first = infer[f].iloc[0]
+                else:
+                    first = infer[f][0]
 
                 if isinstance(first, (np.ndarray, list, tuple)):
                     shape = np.shape(first)
@@ -241,8 +244,8 @@ class DataStructure:
             if f not in self.types:
                 raise ValueError("The feature `{}` has no type.".format(f))
 
-        for f in self.types:
-            if (f in ('vector', 'matrix') or f.startswith('tensor')
+        for f, t in self.types.items():
+            if ((t in ('vector', 'matrix') or t.startswith('tensor'))
                     and f not in self.shapes):
                 raise ValueError("The feature `{}` is a tensor without shape."
                                  .format(f))

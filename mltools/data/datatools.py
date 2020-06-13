@@ -110,9 +110,10 @@ def infer_types(data, ncat=10, dict_type=False):
 
     if isinstance(data, (tuple, list, np.ndarray)):
         shapes = data_shapes(data)
-        if len(shapes) > 1:
-            return "object"
-        elif shapes != [()]:
+
+        # if len(shapes) > 1:
+        #     return "object"
+        if shapes != [()]:
             return "tensor"
         else:
             dtype = set(type(x) for x in data)
@@ -129,7 +130,7 @@ def infer_types(data, ncat=10, dict_type=False):
                 else:
                     return "string"
             elif np.issubdtype(dtype, np.integer):
-                if values == [0, 1]:
+                if np.all(values == [0, 1]):
                     return "binary"
                 elif len(values) <= ncat:
                     return "category"

@@ -54,19 +54,20 @@ class Model:
         :type outputs: `int`
         """
 
-        if (inputs is not None
-                and not isinstance(inputs, (Pipeline, DataStructure))):
+        # TODO: weird bug where DataStructure is no recognized
+        # if (inputs is not None
+        #         and not isinstance(inputs, (Pipeline, DataStructure))):
 
-            error = ("`inputs` can only be None, a Pipeline "
-                     "or a DataStructure, not `{}`.")
-            raise TypeError(error.format(type(inputs)))
+        #     error = ("`inputs` can only be None, a Pipeline "
+        #              "or a DataStructure, not `{}`.")
+        #     raise TypeError(error.format(type(inputs)))
 
-        if (outputs is not None
-                and not isinstance(outputs, (Pipeline, DataStructure))):
+        # if (outputs is not None
+        #         and not isinstance(outputs, (Pipeline, DataStructure))):
 
-            error = ("`outputs` can only be None, a Pipeline "
-                     "or a DataStructure, not `{}`.")
-            raise TypeError(error.format(type(outputs)))
+        #     error = ("`outputs` can only be None, a Pipeline "
+        #              "or a DataStructure, not `{}`.")
+        #     raise TypeError(error.format(type(outputs)))
 
         self.inputs = inputs
         self.outputs = outputs

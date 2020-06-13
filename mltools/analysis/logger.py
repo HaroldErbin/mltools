@@ -276,8 +276,11 @@ class Logger:
 
         filename = self.expandpath(filename, logtime)
 
-        with open(filename, 'w') as f:
-            json.dump(data, f, indent=4)
+        if isinstance(data, pd.DataFrame):
+            data.to_json(filename, indent=4)
+        else:
+            with open(filename, 'w') as f:
+                json.dump(data, f, indent=4)
 
     @staticmethod
     def text_to_fig(text, filename="", logtime=True):

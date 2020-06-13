@@ -4,6 +4,11 @@ from sklearn.multioutput import MultiOutputRegressor
 from .model import Model
 
 
+# TODO: fix warning "DataConversionWarning: A column-vector y was passed when
+#       a 1d array was expected. Please change the shape of y to (n_samples,),
+#       for example using ravel()."
+
+
 class RandomForest(Model):
 
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,

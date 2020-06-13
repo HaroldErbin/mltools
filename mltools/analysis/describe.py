@@ -349,6 +349,8 @@ def correlations(data, features=None, targets=None, method="pearson",
 
     sns.despine(fig=fig, top=True, bottom=True, left=True, right=True)
 
+    fig.tight_layout()
+
     plt.close(fig)
 
     if logger is not None:
@@ -399,10 +401,15 @@ def correlation_text(corr):
 
 
 def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
-                mode="dataframe", filename="", logtime=False, logger=None):
+                label_rot=45, mode="dataframe", filename="", logtime=False,
+                logger=None):
     """
     Compute input importances for outputs from random forest.
     """
+
+    # TODO: adapt figure when there are a lot of features
+    # - change size to prevent label overlap
+    # - if no feature has high importance, zoom range (or give log scale)
 
     # TODO: when inputs are categories, insert all names using category struct
     # TODO: generalize when outputs is not a scalar
@@ -435,7 +442,9 @@ def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
     importances = {}
 
     for o in outputs:
-        model = RandomForest(inputs=struct, outputs=DataStructure([o]),
+        out_struct = DataStructure([o], infer=data)
+
+        model = RandomForest(inputs=struct, outputs=out_struct,
                              method="reg", model_params=model_params)
         model.fit(data)
 
@@ -451,6 +460,7 @@ def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
     for target in importances:
         ax.plot(importances[target], label=target, marker='.')
 
+    # TODO: put ticks at all places
     if sum_tensor is True:
         ax.set_xticks(np.arange(len(inputs)))
     else:
@@ -458,7 +468,12 @@ def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
         ticks = [x[0] for x in dt.linear_indices(struct.shapes.values())]
         ax.set_xticks(ticks)
 
-    ax.set_xticklabels(inputs, rotation=45, ha="right")
+        # TODO: put minor ticks for components
+
+    if label_rot == 90:
+        ax.set_xticklabels(inputs, rotation=label_rot, ha="center")
+    else:
+        ax.set_xticklabels(inputs, rotation=label_rot, ha="right")
 
     ax.set_ylabel("importance")
     ax.set_ylim(ymin=0, ymax=1)
@@ -466,6 +481,8 @@ def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
     ax.legend()
 
     sns.despine(fig=fig)
+
+    fig.tight_layout()
 
     plt.close(fig)
 
