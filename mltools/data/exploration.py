@@ -186,7 +186,7 @@ class DataExploration:
         return corr, fig, text
 
     def importances(self, data, outputs, inputs=None, n_estimators=20,
-                    sum_tensor=False, label_rot=45, filename="",
+                    sum_tensor=False, label_rot=45, ymax=1, filename="",
                     logtime=False):
         """
         Compute input importances for outputs from random forest.
@@ -197,6 +197,7 @@ class DataExploration:
         importances, fig = describe.importances(data, outputs, inputs,
                                                 sum_tensor=sum_tensor,
                                                 label_rot=label_rot,
+                                                ymax=ymax,
                                                 n_estimators=n_estimators)
 
         # TODO: could make heat map also

@@ -260,6 +260,9 @@ class DataStructure:
     def __len__(self):
         return len(self.features)
 
+    @property
+    def linear_shape(self):
+        return datatools.linear_shape(self.shapes.values(), cum=True)
 
     def fit(self, X, y):
 

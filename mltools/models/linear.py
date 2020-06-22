@@ -55,7 +55,10 @@ class LinearRegression(Model):
         elif ((l1 is not None and l2 is None)
                 or (alpha is not None and rho is None)):
 
-            return linear_model.Lasso(alpha=l1 or alpha)
+            if alpha is None:
+                alpha = l1
+
+            return linear_model.Lasso(alpha=alpha)
         else:
             return linear_model.LinearRegression()
 

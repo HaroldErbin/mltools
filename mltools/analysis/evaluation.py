@@ -6,7 +6,20 @@ import numpy as np
 import pandas as pd
 
 
-# TODO: custom metrics should be named: how to pass them as argument?
+# TODO: define metric as class with: name, pretty_name, static method to
+#       compute the metric
+#       can define several names
+#       format name thanks to function according to arguments if any
+#       define as separate class or member of TensorEval?
+#       first option may be better, but create one module per data type
+#       class TensorEval allows to call any class easily (make list of
+#       metrics, lookup by names)
+#       can initialize class to set default arguments (but can be used
+#       as static)
+
+# TODO: allow passing argument to TensorEval.evaluate
+#       to do this: `method` can be text, callable or pair
+#       (text/callable, kwargs)
 
 
 class TensorEval:
@@ -34,7 +47,10 @@ class TensorEval:
             return TensorEval.rmse(y_pred, y_true)
         elif method == "mae":
             return TensorEval.mae(y_pred, y_true)
+        elif method == "accuracy":
+            return TensorEval.accuracy(y_pred, y_true)
         elif callable(method):
+            # callable must also be a class
             return method(y_pred, y_true)
         else:
             return TensorEval.evaluate(y_pred, y_true,
@@ -156,6 +172,25 @@ class TensorEval:
         n = np.size(y_pred)
 
         return TensorEval.norm(TensorEval.errors(y_pred, y_true), norm=1) / n
+
+    @staticmethod
+    def accuracy(y_pred, y_true, tol=0.):
+        """
+        Accuracy of the predictions
+
+        The accuracy is defined by the number of predictions which exactly
+        match the real values up to the precision `tol`. For tensors of
+        integers, set `tol = 0`.
+
+        Since this metric is very specific, it is not used by default.
+        """
+
+        # TODO: generalize to tensors
+
+        n = np.size(y_pred)
+
+        return np.sum(np.abs(TensorEval.errors(y_pred, y_true)) <= tol) / n
+
 
     # def max_error(y_pred, y_true, signed=False, relative=False):
     #     return np.max(TensorEval.errors(y_pred, y_true, signed, relative))

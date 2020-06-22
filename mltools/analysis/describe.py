@@ -401,8 +401,8 @@ def correlation_text(corr):
 
 
 def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
-                label_rot=45, mode="dataframe", filename="", logtime=False,
-                logger=None):
+                label_rot=45, ymax=1, mode="dataframe", filename="",
+                logtime=False, logger=None):
     """
     Compute input importances for outputs from random forest.
     """
@@ -468,6 +468,9 @@ def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
         ticks = [x[0] for x in dt.linear_indices(struct.shapes.values())]
         ax.set_xticks(ticks)
 
+        minor_ticks = [x for x in range(struct.linear_shape) if x not in ticks]
+        ax.set_xticks(minor_ticks, minor=True)
+
         # TODO: put minor ticks for components
 
     if label_rot == 90:
@@ -476,7 +479,7 @@ def importances(data, outputs, inputs=None, n_estimators=20, sum_tensor=False,
         ax.set_xticklabels(inputs, rotation=label_rot, ha="right")
 
     ax.set_ylabel("importance")
-    ax.set_ylim(ymin=0, ymax=1)
+    ax.set_ylim(ymin=0, ymax=ymax)
 
     ax.legend()
 

@@ -16,9 +16,10 @@ from mltools.data.structure import DataStructure
 
 
 # TODO:
+# - for tensors of integers, histogram must have bin length = 1 minimum
+# - combine predictions for training and test set
 # - write function to convert from dict to dataframe (taking into account
 #   tensors, etc.)
-# - combine predictions for training and test set
 
 
 class Predictions:
@@ -294,6 +295,8 @@ class Predictions:
             return self.y_true
 
     def get_errors(self, mode="", relative=False, norm=False):
+        # TODO: arguments signed?
+
         mode = mode or self.mode
 
         pred_items = self.predictions.items()
@@ -936,7 +939,13 @@ class TensorPredictions:
 
         fig, ax = plt.subplots()
 
-        ax.hist(errors, linewidth=1., histtype='step', bins=bins,
+        # hack to remove infinite values
+        # this happens when considering relative errors in the case where
+        # the original value is zero
+        # TODO: find better way
+        err = np.array([e for e in errors if e != np.inf])
+
+        ax.hist(err, linewidth=1., histtype='step', bins=bins,
                 density=density, log=log,
                 color=logger.styles["color:errors"])
 

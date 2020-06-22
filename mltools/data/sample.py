@@ -104,7 +104,7 @@ class RatioSample:
             elif isinstance(dataset, np.ndarray):
                     value_splits[key] = dataset[idx, ...]
             elif isinstance(dataset, pd.DataFrame):
-                    value_splits[key] = dataset.loc[list(idx)]
+                    value_splits[key] = dataset.iloc[list(idx)]
 
         return value_splits
 
