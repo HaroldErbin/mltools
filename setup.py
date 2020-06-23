@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = "mltools",
-    version = "dev",
+    version = "1.0",
     packages = find_packages()
     )
 

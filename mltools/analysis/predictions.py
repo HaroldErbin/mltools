@@ -230,10 +230,24 @@ class Predictions:
 
         # process data
         for col, fn in self.categories_fn.items():
+            if col not in self.y_pred:
+                continue
+
             self.y_pred[col] = fn(self.y_pred[col])
 
+            if self.all_y_pred is not None:
+                for i, y in enumerate(self.all_y_pred):
+                    self.all_y_pred[i][col] = fn(y[col])
+
         for col, fn in self.integers_fn.items():
+            if col not in self.y_pred:
+                continue
+
             self.y_pred[col] = fn(self.y_pred[col]).astype(int)
+
+            if self.all_y_pred is not None:
+                for i, y in enumerate(self.all_y_pred):
+                    self.all_y_pred[i][col] = fn(y[col]).astype(int)
 
         if self.postprocessing_fn is not None:
             self.y_pred = self.postprocessing_fn(self.y_pred)
@@ -455,6 +469,15 @@ class Predictions:
 
     def training_curve(self, metric='loss', history=None, log=True,
                        filename="", logtime=False):
+        """
+        Loss evolution during training.
+
+        If the training is performed over an ensemble, history can be of
+        different lengths in case of early stopping. In that case, it is
+        necessary to pad each history such that they have the same length.
+        We choose to pad with the last value (which may not correspond to
+        the best model).
+        """
 
         # TODO: improve and make more generic
 
@@ -464,7 +487,7 @@ class Predictions:
             return
 
         if isinstance(history, dict):
-            val_history_std = history.get("val_%s_std" + metric, None)
+            val_history_std = history.get("val_%s_std" % metric, None)
             val_history = history.get("val_" + metric, None)
             history_std = history.get(metric + "_std", None)
             history = history[metric]
@@ -483,8 +506,10 @@ class Predictions:
         ax.plot(steps, history[:], '.-',
                 color=styles["color:train"], label=styles["label:train"])
 
-        ax.fill_between(steps, history - history_std, history + history_std,
-                        alpha=0.3, color=styles["color:train"])
+        if history_std is not None:
+            ax.fill_between(steps, history - history_std,
+                            history + history_std,
+                            alpha=0.3, color=styles["color:train"])
 
         if val_history is not None:
             ax.plot(steps, val_history, '.--',
@@ -494,6 +519,9 @@ class Predictions:
                 ax.fill_between(steps, val_history - val_history_std,
                                 val_history + val_history_std,
                                 alpha=0.3, color=styles["color:val"])
+
+        # TODO: plot position of best model if early stopping
+        #       it is located at total_step - wait_step
 
         ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(integer=True))
 

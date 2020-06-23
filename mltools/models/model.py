@@ -12,6 +12,8 @@ from mltools.data import datatools
 from mltools.data.structure import DataStructure
 
 
+# TODO: method `evaluate`, `score` with metric (or list of metrics) as argument
+
 # TODO: a model can be passed a DataStructure or a Pipeline
 # TODO: method to create new model with different parameters from existing
 #      (keep inputs/outputs)
@@ -171,6 +173,11 @@ class Model:
 
     def fit(self, X, y=None, cv=False):
 
+        # TODO: define method to fit one model, then apply for each model
+        # if n > 1: this would allow to have models with different structures
+
+        # TODO: count model number trained
+
         if y is None:
             y = X
 
@@ -221,7 +228,31 @@ class Model:
         Update training history.
         """
 
+        # TODO: if early stopping, truncate to value for best model?
+
         if self.n_models > 1:
+            # history can be of different lengths (for example due to early
+            # stopping)
+            # to solve this problem, we pad with the last data of each array
+
+            if isinstance(history[0], dict):
+                lengths = [len(list(h.values())[0]) for h in history]
+            else:
+                lengths = [len(h) for h in history]
+
+            if len(lengths) > 1:
+                max_length = max(lengths)
+
+                if isinstance(history[0], dict):
+                    history = [{k: np.pad(v, (0, max_length - len(v)),
+                                          constant_values=v[-1])
+                                for k, v in h.items()}
+                               for h in history]
+                else:
+                    history = [np.pad(h, (0, max_length - len(h)),
+                                      constant_values=h[-1])
+                               for h in history]
+
             hist, hist_std = datatools.average([h for h in history])
         else:
             hist = history

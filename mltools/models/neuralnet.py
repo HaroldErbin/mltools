@@ -12,13 +12,19 @@ Example: for a GAN, the first argument is the complete GAN model,
 the dictionary is made of the generator and discriminator parts.
 """
 
+import os
+import tempfile
+import time
+
 import numpy as np
 
 from tensorflow import keras
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 
 from .model import Model
 
 from mltools.data.structure import DataStructure
+from mltools.data.datatools import affix_keys
 from mltools.analysis.logger import Logger
 
 
@@ -61,11 +67,9 @@ class NeuralNet(Model):
             else:
                 return self.submodels[model]
 
-    def fit(self, X, y=None, train_params=None, fit_fn=None):
-        # fit_fn: fine-tuned fit function (useful for GAN)
+    def fit(self, X, y=None, val_data=None, train_params=None):
 
-        # TODO: check model type, if sequential, use flat mode,
-        #   if functional, use col
+        # TODO: missing early stopping in summary
 
         # TODO: define default train parameters
         if train_params is None:
@@ -73,22 +77,108 @@ class NeuralNet(Model):
 
         self.train_params_history.append(train_params)
 
+        # prepare callbacks: early stopping and save best model
+        callbacks = []
+
+        # copy params to remove callbacks
+        params = train_params.copy()
+
+        early_stopping = params.pop("early_stopping", None)
+
+        if early_stopping is not None:
+            if isinstance(early_stopping, (list, tuple)):
+                early_stopping = dict(zip(['min_delta', 'patience'],
+                                          early_stopping))
+                early_stopping['restore_best_weights'] = True
+
+            if not isinstance(early_stopping, dict):
+                raise TypeError("`early_stopping` must be a dictionary.")
+
+            es_call = EarlyStopping(**early_stopping)
+            callbacks.append(es_call)
+
+            # use hash to prevent name collision when running several codes
+            hashtime = hex(hash(time.time()))
+            modelfile = os.path.join(tempfile.gettempdir(),
+                                     'best_model_%s.h5' % hashtime)
+
+            # name idea: 'model.{epoch:02d}-{val_loss:.2f}.h5'
+
+            mc_call = ModelCheckpoint(modelfile, save_best_only=True)
+            callbacks.append(mc_call)
+
+        reduce_lr = params.pop("reduce_lr", None)
+
+        if reduce_lr is not None:
+            if isinstance(reduce_lr, (list, tuple)):
+                reduce_lr = dict(zip(['factor', 'patience'], reduce_lr))
+
+            if not isinstance(reduce_lr, dict):
+                raise TypeError("`early_stopping` must be a dictionary.")
+
+            rl_call = ReduceLROnPlateau(**reduce_lr)
+            callbacks.append(rl_call)
+
         if y is None:
             y = X
+
+        if val_data is None:
+            if "val" in X and "val" in y:
+                X_val = X['val']
+                y_val = y['val']
+            else:
+                X_val = None
+                y_val = None
+        else:
+            X_val, y_val = val_data
+
+        if "train" in X and "train" in y:
+            X = X['train']
+            y = y['train']
 
         # add tests in the function?
         X = self.transform_data(X, self.inputs)
         y = self.transform_data(y, self.outputs)
 
+        if X_val is not None and y_val is not None:
+            X_val = self.transform_data(X_val, self.inputs)
+            y_val = self.transform_data(y_val, self.outputs)
+
+            val_data = (X_val, y_val)
+        else:
+            val_data = None
+
         # TODO: add method to prefix keys with inputs/outputs/aux, etc.
 
         # train Keras model which returns history
         if self.n_models > 1:
-            history = [m.fit(X, y, **train_params) for m in self.model]
+            history = []
+
+            for i, m in enumerate(self.model):
+                h = m.fit(X, y, validation_data=val_data,
+                          callbacks=callbacks, **params)
+
+                history.append(h)
+
+            if early_stopping is not None:
+                try:
+                    # self.model[i] = keras.models.load_model(modelfile)
+                    os.remove(modelfile)
+                except OSError:
+                    pass
+
             self.update_history([h.history for h in history])
         else:
-            history = self.model.fit(X, y, **train_params)
+            history = self.model.fit(X, y, validation_data=val_data,
+                                     callbacks=callbacks, **params)
             self.update_history(history.history)
+
+            if early_stopping is not None:
+                try:
+                    self.model = keras.models.load_model(modelfile)
+                    os.remove(modelfile)
+                except OSError:
+                    pass
 
         return history
 
@@ -97,7 +187,7 @@ class NeuralNet(Model):
         X = self.transform_data(X, self.inputs)
 
         if self.n_models > 1:
-            y = [m.predict(X) for m in self.model]
+            y = [self.transform_pred(m.predict(X)) for m in self.model]
 
             if self.outputs is not None:
                 y = [self.outputs.inverse_transform(v) for v in y]
@@ -113,7 +203,7 @@ class NeuralNet(Model):
                     # if no data structure is defined, try simple average
                     return Logger.average(y)
         else:
-            y = self.model.predict(X)
+            y = self.transform_pred(self.model.predict(X))
 
             if self.outputs is not None:
                 y = self.outputs.inverse_transform(y)
@@ -132,20 +222,24 @@ class NeuralNet(Model):
         `dict.
         """
 
-        # features = DataStructure
+        # features is a DataStructure
 
-        if features is None:
+        if features is None or data is None:
             return data
 
         # TODO: allow different types of network?
+        #       (this would require to build inputs for each independently)
         if self.n_models > 1:
             nn_type = set(map(type, self.model))
+            model = self.model[0]
+
             if len(nn_type) > 1:
                 raise ValueError("Cannot handle ensemble of neural networks "
                                  "of different types.")
             nn_type = nn_type.pop()
         else:
             nn_type = type(self.model)
+            model = self.model
 
         if nn_type == keras.models.Sequential:
             if len(features) == 1:
@@ -155,7 +249,36 @@ class NeuralNet(Model):
                 # multiple features -> return a matrix
                 return features(data, mode="flat")
         else:
-            return features(data, mode="col")
+            data = features(data, mode="col", trivial_dim=True)
+
+            # prefix names if necessary
+            if features == self.inputs:
+                data = {k: v for k, v
+                        in affix_keys(data, suffix="_input").items()
+                        if k in model.input_names}
+            if features == self.outputs:
+                data = {k: v for k, v
+                        in affix_keys(data, suffix="_output").items()
+                        if k in model.output_names}
+
+            # TODO: take into account multiple auxiliary inputs/outputs
+            # TODO: more generic name matching (don't rely on _input, etc.)
+
+            return data
+
+    def transform_pred(self, data):
+
+        if self.n_models > 1:
+            model = self.model[0]
+        else:
+            model = self.model
+
+        if len(model.output_names) > 1:
+            data = dict(zip(model.output_names, data))
+        else:
+            data = {model.output_names[0]: data}
+
+        return {k.rstrip('_output'): v for k, v in data.items()}
 
 
 def deep_model():

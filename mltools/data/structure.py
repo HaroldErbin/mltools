@@ -113,7 +113,7 @@ class DataStructure:
                 infer_cols = list(infer.columns)
             else:
                 raise TypeError("Inference works only from an object with "
-                                "must have named features. "
+                                "named features. "
                                 "Supported types are: dict, dataframe.")
         else:
             infer_cols = None
@@ -253,9 +253,9 @@ class DataStructure:
     def __repr__(self):
         return "<DataStructure: {}>".format(list(self.features))
 
-    def __call__(self, X, mode=None):
+    def __call__(self, X, mode=None, trivial_dim=False):
 
-        return self.transform(X, mode)
+        return self.transform(X, mode, trivial_dim=trivial_dim)
 
     def __len__(self):
         return len(self.features)
@@ -279,7 +279,7 @@ class DataStructure:
         else:
             raise NotImplementedError
 
-    def transform(self, X, mode=None):
+    def transform(self, X, mode=None, trivial_dim=False):
 
         # TODO: X can be a list of tables, with non-overlapping columns
         # useful if data are stored in different ways (images, etc.)
@@ -292,14 +292,14 @@ class DataStructure:
         if mode == 'flat':
             return self.transform_flat(X)
         elif mode == 'col':
-            return self.transform_col(X)
+            return self.transform_col(X, trivial_dim=trivial_dim)
         else:
             raise ValueError("No mode `{}` available.".format(mode))
 
     def transform_flat(self, X):
         return datatools.tab_to_array(self.data_filter(X), flatten=True)
 
-    def transform_col(self, X):
+    def transform_col(self, X, trivial_dim=False):
         # keep id column
         if "id" in X:
             id_dic = {"id": X["id"]}
@@ -308,7 +308,23 @@ class DataStructure:
         else:
             id_dic = {}
 
-        return {**id_dic, **datatools.tab_to_array(self.data_filter(X))}
+        X = {**id_dic, **datatools.tab_to_array(self.data_filter(X))}
+
+        # TODO: improve this: I think that padding should not be done here
+        #       but precise it in the explanations of the class
+
+        # There can be a shape mismatch between what the structure specifies
+        # and what the function `tab_to_array` returns since the latter
+        # does not know about shape. Since padding must be done before,
+        # the only point can be the additional `1` of the last dimension.
+
+        # if `trivial_dim` is True, include the final `1`
+        if trivial_dim is True:
+            for k, v in X.items():
+                if k != 'id' and v.shape[1:] != self.shapes[k]:
+                    X[k] = v.reshape(-1, *self.shapes[k])
+
+        return X
 
     def inverse_transform(self, y):
         if isinstance(y, dict):
