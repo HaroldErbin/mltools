@@ -61,7 +61,7 @@ class Logger:
 
     styles = STYLES
 
-    def __init__(self, path="", logtime="folder",
+    def __init__(self, path="", prefix="", suffix="", logtime="folder",
                  logtime_fmt="%Y-%m-%d-%H%M%S", palette="muted"):
         """
         Inits Logger
@@ -80,6 +80,11 @@ class Logger:
 
         self.styles = STYLES.copy()
 
+        # append/prepend all filenames with suffix/prefix
+        # TODO: implement
+        self.prefix = prefix
+        self.suffix = suffix
+
         # set base path to use when only filename is given
         self.path = os.path.abspath(path)
 
@@ -94,31 +99,41 @@ class Logger:
             self._time_filename = False
 
         # set logtime to a fixed value, which is used for all files
-        self.logtime = time.strftime(logtime_fmt)
         self.logtime_fmt = logtime_fmt
+        self.reset_time()
 
         sns.set_palette(palette)
 
     def __repr__(self):
-        return "<Logger, base = {}, logtime = {}>".format(self.path,
-                                                          self.logtime)
+        string = "<Logger, base = {}, logtime = {}>"
+        return string.format(self.path, self.logtime)
+
+    def reset_time(self, logtime=None):
+        if logtime is None:
+            self.logtime = time.strftime(self.logtime_fmt)
+        else:
+            raise NotImplementedError
 
     @staticmethod
-    def inserttofilename(filename, text=""):
+    def inserttofilename(path, prefix="", suffix=""):
         """
         Insert some text in filename before the extension.
 
         Args:
             filename (str): filename, possibly including path
-            text (str): text to insert in the filename before the extension
+            append (str): text to insert at the end of filename
+            append (str): text to insert at the beginning of filename
 
         Returns:
-            str: original filename with `text` inserted before the extension.
+            str: original filename with `append` inserted at the end (but
+            before the extension if present) and `prepend` at beginning
+            of name
         """
 
-        name, ext = os.path.splitext(filename)
+        path, name = os.path.split(path)
+        name, ext = os.path.splitext(name)
 
-        return name + text + ext
+        return os.path.join(path, prefix + name + suffix + ext)
 
     def logtime_text(self, fmt=None):
         fmt = fmt or self.styles["print:datetime"]
@@ -126,7 +141,7 @@ class Logger:
         return time.strftime(fmt,
                              time.strptime(self.logtime, self.logtime_fmt))
 
-    def expandpath(self, filename="", logtime=True):
+    def expandpath(self, filename="", logtime=False):
         """
         Find complete path.
 
@@ -166,6 +181,8 @@ class Logger:
                 filepath = os.path.join(self.path, self.logtime, filename)
             else:
                 filepath = os.path.join(self.path, filename)
+
+        filepath = self.inserttofilename(filepath, self.prefix, self.suffix)
 
         # insert time at end of filename, before extension
         if logtime is True and self._time_filename is True:
