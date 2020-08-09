@@ -149,6 +149,9 @@ class DataStructure:
         if self.pipeline is not None:
             raise NotImplementedError
 
+    def __contains__(self, key):
+        return key in self.features
+
     def _extract_features_types_shapes(self, features, datatypes, infer,
                                        infer_cols):
 
