@@ -300,4 +300,5 @@ class Model:
 
         # TODO: make model summary (here instead of Predictions)
 
-        raise NotImplementedError
+        # raise NotImplementedError
+        pass

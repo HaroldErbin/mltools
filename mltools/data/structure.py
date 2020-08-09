@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from mltools.data import datatools
+from mltools.analysis.logger import Logger
 
 
 # TODO: allow "feature in structure"
@@ -67,7 +68,8 @@ class DataStructure:
 
     def __init__(self, features=None, datatypes=None, shapes=None,
                  with_channels=None, infer=None,
-                 pipeline=None, scaling=None, filter_fn=None, mode='flat'):
+                 pipeline=None, scaling=None, filter_fn=None, mode='flat',
+                 name=''):
         """
         List of features to be transformed. The types can be inferred from
         a dataframe or they can be forced.
@@ -103,9 +105,13 @@ class DataStructure:
         :type with_channels: tuple(str)
         :param infer: data with named features to infer the structure
         :type infer: dataframe, dict(str, array)
+        :param name: name of the data structure
+        :type name: str
         """
 
         # TODO: the argument `shapes` is not used
+
+        self.name = name
 
         if infer is not None:
             if isinstance(infer, dict):
@@ -251,11 +257,12 @@ class DataStructure:
         for f, t in self.types.items():
             if ((t in ('vector', 'matrix') or t.startswith('tensor'))
                     and f not in self.shapes):
-                raise ValueError("The feature `{}` is a tensor without shape."
+                raise ValueError("The feature `{f}` is a tensor without shape."
                                  .format(f))
 
     def __repr__(self):
-        return "<DataStructure: {}>".format(list(self.features))
+        name = f" ({self.name})" if self.name else ""
+        return "<DataStructure{}: {}>".format(name, list(self.features))
 
     def __call__(self, X, mode=None, trivial_dim=False):
 
@@ -374,3 +381,33 @@ class DataStructure:
         # TODO: write second method for more complete average for other types
 
         return datatools.average(ensemble)
+
+    def summary(self, name="", filename="", logtime=False,
+                logger=None, show=False):
+        """
+        Summary of the data structure.
+        """
+
+        text = ""
+
+        if name == "":
+            name = self.name or "Features"
+
+        text += f"{name}:\n"
+
+        for feature in self.features:
+            text += f"- {feature}\n"
+
+        # TODO: add filter infos
+        # TODO: add scaling infos
+
+        if filename != "":
+            if logger is None:
+                logger = Logger(logtime="filename")
+
+            logger.save_text(text, filename=filename, logtime=logtime)
+
+        if show is True:
+            print(text)
+
+        return text

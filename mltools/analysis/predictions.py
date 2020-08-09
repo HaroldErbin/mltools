@@ -593,6 +593,7 @@ class Predictions:
         figs.append(self.logger.text_to_fig(metrics_text))
 
         if show is True:
+            print()
             print(metrics_text)
 
         # table of errors
@@ -606,7 +607,9 @@ class Predictions:
         figs.append(self.logger.text_to_fig(rel_error_text))
 
         if show is True:
+            print()
             print(error_text)
+            print()
             print(rel_error_text)
 
         # TODO: table of standard deviations
@@ -624,6 +627,27 @@ class Predictions:
         figs += self.plot_all_errors(relative=True, signed=signed_errors,
                                      density=density, bins=bins,
                                      log=log)
+
+        # page on input and output data structures
+        io_text = ""
+
+        if self.inputs is not None:
+            name = self.inputs.name or "Inputs"
+            io_text += self.inputs.summary(name=name)
+            io_text += "\n"
+
+        if self.outputs is not None:
+            name = self.outputs.name or "Outputs"
+            io_text += self.outputs.summary(name=name)
+            io_text += "\n"
+
+        if io_text != "":
+            io_text = "## Inputs and outputs\n\n" + io_text
+            figs.append(self.logger.text_to_fig(io_text))
+
+        if show is True:
+            print()
+            print(io_text)
 
         # page on model information
         model_text = self.logger.dict_to_text(self.model.model_params)
