@@ -22,6 +22,32 @@ import pandas as pd
 #       (text/callable, kwargs)
 
 
+class Metric:
+
+    def __init__(self, value, name, pretty_name=None):
+        # TODO: add format (float, percentage...)
+
+        self.value = value
+        self.name = name
+
+        self.pretty_name = pretty_name or pretty_name
+
+    def __str__(self):
+
+        pass
+
+    def __float__(self):
+
+        pass
+
+
+def rmse(y_true, y_pred):
+    val = None
+
+    return Metric(val, "rmse", "RMSE")
+
+
+
 class TensorEval:
 
     tensor_metrics = ["rmse", "mae", "l1_mae", "l2_mae"]

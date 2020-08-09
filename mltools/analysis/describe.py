@@ -54,6 +54,8 @@ def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
      check that the `step` method gives the correct result.
     """
 
+    # TODO: PDF has a problem sometimes (see CICY)
+
     logger = logger or Logger
 
     with sns.axes_style("whitegrid"):

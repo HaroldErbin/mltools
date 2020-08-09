@@ -29,11 +29,13 @@ class LinearRegression(Model):
 
     def create_model(self):
 
-        l1 = self.model_params.get("l1", None)
-        l2 = self.model_params.get("l2", None)
+        params = self.model_params.copy()
 
-        alpha = self.model_params.get("alpha", None)
-        rho = self.model_params.get("rho", None)
+        l1 = params.pop("l1", None)
+        l2 = params.pop("l2", None)
+
+        alpha = params.pop("alpha", None)
+        rho = params.pop("rho", None)
 
         if ((l1 is not None or l2 is not None)
                 and (alpha is not None or rho is not None)):
@@ -49,18 +51,20 @@ class LinearRegression(Model):
                 alpha = l1 + l2
                 rho = 0 if alpha == 0 else l1 / alpha
 
-            return linear_model.ElasticNet(alpha=alpha, l1_ratio=rho)
+            return linear_model.ElasticNet(alpha=alpha, l1_ratio=rho,
+                                           **params)
         elif l2 is not None and l1 is None:
-            return linear_model.Ridge(alpha=l2)
+            return linear_model.Ridge(alpha=l2, **params)
         elif ((l1 is not None and l2 is None)
                 or (alpha is not None and rho is None)):
 
             if alpha is None:
                 alpha = l1
 
-            return linear_model.Lasso(alpha=alpha)
+            return linear_model.Lasso(alpha=alpha, **params)
         else:
-            return linear_model.LinearRegression()
+            params.pop("max_iter", None)
+            return linear_model.LinearRegression(**params)
 
     def model_representation(self):
         """

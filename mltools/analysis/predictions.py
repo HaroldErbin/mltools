@@ -408,7 +408,7 @@ class Predictions:
 
         return results
 
-    def plot_feature(self, feature, plottype="step", sigma=2, density=True,
+    def plot_feature(self, feature, plottype="step", sigma=1, density=True,
                      bins=None, log=False, filename="", logtime=True,
                      **kwargs):
 
@@ -416,7 +416,7 @@ class Predictions:
                    .plot_feature(plottype, density, sigma, bins, log,
                                  filename, logtime, **kwargs)
 
-    def plot_all_features(self, plottype="step", sigma=2, density=True,
+    def plot_all_features(self, plottype="step", sigma=1, density=True,
                           bins=None, log=False, filename="", logtime=True):
 
         figs = []
@@ -459,7 +459,7 @@ class Predictions:
 
         return figs
 
-    def plot_feature_errors(self, feature, sigma=2, signed_errors=True,
+    def plot_feature_errors(self, feature, sigma=1, signed_errors=True,
                             density=True, bins=None, log=False,
                             filename="", logtime=True, **kwargs):
 
@@ -468,7 +468,7 @@ class Predictions:
                                         log, filename, logtime, **kwargs)
 
     def training_curve(self, metric='loss', history=None, log=True,
-                       filename="", logtime=False):
+                       marker=None, filename="", logtime=False):
         """
         Loss evolution during training.
 
@@ -503,7 +503,7 @@ class Predictions:
 
         steps = np.arange(1, len(history)+1, dtype=int)
 
-        ax.plot(steps, history[:], '.-',
+        ax.plot(steps, history[:], linestyle='solid', marker=marker,
                 color=styles["color:train"], label=styles["label:train"])
 
         if history_std is not None:
@@ -512,7 +512,7 @@ class Predictions:
                             alpha=0.3, color=styles["color:train"])
 
         if val_history is not None:
-            ax.plot(steps, val_history, '.--',
+            ax.plot(steps, val_history, linestyle='solid', marker=marker,
                     color=styles["color:val"], label=styles["label:val"])
 
             if val_history_std is not None:
@@ -538,7 +538,7 @@ class Predictions:
 
         return fig
 
-    def summary_feature(self, feature, mode="", metrics=None, sigma=2,
+    def summary_feature(self, feature, mode="", metrics=None, sigma=1,
                         signed_errors=True, density=True, bins=None,
                         log=False, filename="", logtime=True, **kwargs):
 
@@ -549,9 +549,13 @@ class Predictions:
                                     filename=filename, logtime=logtime,
                                     **kwargs)
 
-    def summary(self, mode="", training_metrics=None, signed_errors=True,
-                density=True, bins=None, log=False,
+    def summary(self, mode="", training_metrics=None, sigma=1,
+                signed_errors=True, density=True, bins=None, log=False,
                 filename="", logtime=True, show=False, extra_figs=None):
+
+        # TODO: add information on inputs/outputs
+        # TODO: add the number of models
+        # TODO: add information on sampling
 
         # TODO: add computation of errors
 
@@ -608,8 +612,12 @@ class Predictions:
         # TODO: table of standard deviations
 
         # distributions and error plots
-        figs += self.plot_all_features(plottype="step", density=density,
-                                       bins=bins, log=log)
+        figs += self.plot_all_features(sigma=sigma, plottype="step",
+                                       density=density, bins=bins, log=log)
+        # figs += self.plot_all_features(sigma=sigma, plottype="plain",
+        #                                density=density, bins=bins, log=log)
+        # figs += self.plot_all_features(sigma=sigma, plottype="seaborn",
+        #                                density=density, bins=bins, log=log)
         figs += self.plot_all_errors(relative=False, signed=signed_errors,
                                      density=density, bins=bins,
                                      log=log)
@@ -861,7 +869,7 @@ class TensorPredictions:
             else:
                 return results, std
 
-    def plot_feature(self, plottype="step", density=True, sigma=2, bins=None,
+    def plot_feature(self, plottype="step", density=True, sigma=1, bins=None,
                      log=False, filename="", logtime=True, norm=True):
         """
         Plot the distribution of a feature.
@@ -992,7 +1000,7 @@ class TensorPredictions:
 
         return fig
 
-    def plot_feature_errors(self, sigma=2, signed_errors=True,
+    def plot_feature_errors(self, sigma=1, signed_errors=True,
                             density=True, bins=None, log=False,
                             filename="", logtime=True, norm=True):
 
@@ -1031,7 +1039,7 @@ class TensorPredictions:
 
         return figs
 
-    def summary_feature(self, mode="", metrics=None, sigma=2,
+    def summary_feature(self, mode="", metrics=None, sigma=1,
                         signed_errors=True, density=True, bins=None, log=False,
                         filename="", logtime=True, norm=True):
 

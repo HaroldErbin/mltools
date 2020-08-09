@@ -171,10 +171,12 @@ class Model:
             with open(filename, 'w') as f:
                 json.dump(model_params, f, indent=4)
 
-    def fit(self, X, y=None, cv=False):
+    def fit(self, X, y=None, cv=False, train_params=None, filtering=True):
 
         # TODO: define method to fit one model, then apply for each model
         # if n > 1: this would allow to have models with different structures
+
+        # filtering → apply filter (for outliers), by default yes
 
         # TODO: count model number trained
 
@@ -193,7 +195,9 @@ class Model:
         else:
             return self.model.fit(X, y)
 
-    def predict(self, X, return_all=False):
+    def predict(self, X, return_all=False, filtering=False):
+
+        # filtering → apply filter (for outliers), by default no
 
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
@@ -288,5 +292,12 @@ class Model:
         raise NotImplementedError
 
     def load_model(self, file):
+
+        raise NotImplementedError
+
+    def summary(self, save_params=True, filename=None, logtime=True,
+                logger=None):
+
+        # TODO: make model summary (here instead of Predictions)
 
         raise NotImplementedError

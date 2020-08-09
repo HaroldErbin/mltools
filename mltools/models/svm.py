@@ -11,7 +11,7 @@ class SVM(Model):
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
                  method="reg", name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, method, n, name)
+        Model.__init__(self, inputs, outputs, model_params, n, method, name)
 
         # default arguments
         if "kernel" not in self.model_params:

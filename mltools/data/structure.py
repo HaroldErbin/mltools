@@ -29,6 +29,7 @@ import pandas as pd
 from mltools.data import datatools
 
 
+# TODO: allow "feature in structure"
 # TODO: when transforming, if there is a single feature, can pass
 #   single instance (int, etc.) or vec
 # TODO: for col mode, can also output list(d.values())
@@ -65,8 +66,8 @@ class DataStructure:
     """
 
     def __init__(self, features=None, datatypes=None, shapes=None,
-                 with_channels=None, pipeline=None, scaling=None, infer=None,
-                 mode='flat'):
+                 with_channels=None, infer=None,
+                 pipeline=None, scaling=None, filter_fn=None, mode='flat'):
         """
         List of features to be transformed. The types can be inferred from
         a dataframe or they can be forced.
@@ -264,7 +265,11 @@ class DataStructure:
     def linear_shape(self):
         return datatools.linear_shape(self.shapes.values(), cum=True)
 
-    def fit(self, X, y):
+    def fit(self, X, y, reset=False):
+
+        # fit scaling and pipeline
+        # reset parameters allows to train from scratch (useful if executing)
+        # several time the same cell
 
         pass
 
@@ -279,7 +284,10 @@ class DataStructure:
         else:
             raise NotImplementedError
 
-    def transform(self, X, mode=None, trivial_dim=False):
+    def transform(self, X, mode=None, scaling=True, filtering=True,
+                  trivial_dim=False):
+
+        # can disable filtering and scaling
 
         # TODO: X can be a list of tables, with non-overlapping columns
         # useful if data are stored in different ways (images, etc.)
@@ -326,7 +334,7 @@ class DataStructure:
 
         return X
 
-    def inverse_transform(self, y):
+    def inverse_transform(self, y, scaling=True, filtering=True):
         if isinstance(y, dict):
             return self.inverse_transform_col(y)
         elif isinstance(y, np.ndarray):

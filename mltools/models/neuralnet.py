@@ -19,7 +19,8 @@ import time
 import numpy as np
 
 from tensorflow import keras
-from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from tensorflow.keras.callbacks import (EarlyStopping, ModelCheckpoint,
+                                        ReduceLROnPlateau)
 
 from .model import Model
 
@@ -129,8 +130,10 @@ class NeuralNet(Model):
             else:
                 X_val = None
                 y_val = None
-        else:
+        elif isinstance(val_data, (tuple, list)):
             X_val, y_val = val_data
+        else:
+            X_val = y_val
 
         if "train" in X and "train" in y:
             X = X['train']
