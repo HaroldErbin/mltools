@@ -645,28 +645,33 @@ def array_to_dict(array, shapes):
     return {k: a for k, a in zip(shapes.keys(), array_list)}
 
 
-def average(ensemble):
+def average(ensemble, axis=0):
     """
     Define basic average.
     """
 
+    # if data is a dict of list, average
+    if isinstance(ensemble, dict):
+        mean = {f: np.mean(v, axis=axis) for f, v in ensemble.items()}
+        std = {f: np.std(v, axis=axis) for f, v in ensemble.items()}
+
+        return mean, std
+
+    # if not, assume it is a list of dict or list
     types = set(map(type, ensemble))
 
     if len(types) > 1:
-        raise ValueError("Can average only on an ensemble containing a "
-                         "single type of predictions. FOund `{}`."
-                         .format(types))
+        raise TypeError(f"Can average only on an ensemble containing a "
+                        "single type of predictions. FOund `{types}`.")
 
     datatype = types.pop()
 
     if datatype == dict:
-        data = exchange_list_dict(ensemble)
-
-        mean = {f: np.mean(v, axis=0) for f, v in data.items()}
-        std = {f: np.std(v, axis=0) for f, v in data.items()}
-
+        mean, std = average(exchange_list_dict(ensemble))
     elif datatype in (list, tuple, np.ndarray):
-        mean = np.mean(ensemble, axis=0)
-        std = np.std(ensemble, axis=0)
+        mean = np.mean(ensemble, axis=axis)
+        std = np.std(ensemble, axis=axis)
+    else:
+        raise TypeError(f"Cannot average {datatype}.")
 
     return mean, std

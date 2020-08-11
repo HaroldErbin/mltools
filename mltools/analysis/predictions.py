@@ -562,11 +562,13 @@ class Predictions:
         if filename == "":
             pdf_filename = ""
             csv_filename = ""
-            json_filename = ""
+            metrics_filename = ""
+            model_filename = ""
         else:
             pdf_filename = filename + "_summary.pdf"
             csv_filename = filename + "_predictions.csv"
-            json_filename = filename + "_metrics.json"
+            metrics_filename = filename + "_metrics.json"
+            model_filename = filename + "_model"
 
         figs = []
 
@@ -587,7 +589,7 @@ class Predictions:
         # summary of all metrics
         metrics_text = "## Metrics\n\n"
         metrics_text += self.all_feature_all_metrics(mode="text",
-                                                     filename=json_filename,
+                                                     filename=metrics_filename,
                                                      logtime=logtime)
 
         figs.append(self.logger.text_to_fig(metrics_text))
@@ -628,6 +630,23 @@ class Predictions:
                                      density=density, bins=bins,
                                      log=log)
 
+        # training curves
+        if training_metrics is None:
+            training_figs = [self.training_curve(log=True)]
+        else:
+            if not isinstance(training_metrics, (tuple, list)):
+                training_metrics = [training_metrics]
+
+            training_figs = [self.training_curve(log=True, metric=metric)
+                             for metric in training_metrics]
+        figs += [fig for fig in training_figs if fig is not None]
+
+        # page on model information
+        model_text = self.model.summary(filename=model_filename,
+                                        logtime=logtime, logger=self.logger)
+
+        figs.append(self.logger.text_to_fig(model_text))
+
         # page on input and output data structures
         io_text = ""
 
@@ -649,32 +668,7 @@ class Predictions:
             print()
             print(io_text)
 
-        # page on model information
-        model_text = self.logger.dict_to_text(self.model.model_params)
-        if model_text == "":
-            model_text = "No parameters"
-        else:
-            model_text = "Parameters:\n" + model_text
-        model_text = "## Model - %s\n\n" % self.model + model_text
-
-        if len(self.model.train_params_history) > 0:
-            model_text += "\n\nTrain parameters:\n"
-            model_text += self.logger.dict_to_text(self.model.get_train_params)
-
-        # save model parameters
-        self.model.save_params(filename="%s_model_params.json" % filename,
-                               logtime=logtime, logger=self.logger)
-
-        if training_metrics is None:
-            training_figs = [self.training_curve(log=True)]
-        else:
-            training_figs = [self.training_curve(log=True, metric=metric)
-                             for metric in training_metrics]
-        figs += [fig for fig in training_figs if fig is not None]
-
-        figs.append(self.logger.text_to_fig(model_text))
-
-        # additional figurescreated outside the function
+        # additional figures created outside the function
         if extra_figs is not None:
             figs += extra_figs
 

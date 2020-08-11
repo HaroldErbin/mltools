@@ -8,8 +8,9 @@ import numpy as np
 
 from sklearn.pipeline import Pipeline
 
-from mltools.data import datatools
+from mltools.data import datatools as dt
 from mltools.data.structure import DataStructure
+from mltools.analysis.logger import Logger
 
 
 # TODO: method `evaluate`, `score` with metric (or list of metrics) as argument
@@ -76,22 +77,26 @@ class Model:
 
         self.n = n
 
-        # keep all train parameters used
-        # not used by all models
+        # keep all train parameters used (updated only by some models)
         self.train_params_history = []
 
-        # training history
-        # not used by all models
+        # training history (updated only by some models)
         self.history = {}
 
         # method used (in general classification or regression)
-        # not used by all models
+        # defined only for some models
         self.method = self._get_method(method)
 
         if model_params is None:
             self.model_params = {}
         else:
             self.model_params = model_params
+
+        # define loss and metrics name by looking in model parameters
+        # if no loss is given, use 'loss' for the loss function
+        # if no metric is given, use the name of the loss
+        self.loss = self.model_params.get('loss', 'loss')
+        self.metrics = self.model_params.get('metrics', [self.loss])
 
         self.submodels = None
         # this must be instantiated for each model class because it may
@@ -150,35 +155,23 @@ class Model:
         else:
             return 1
 
-    @property
-    def get_train_params(self):
-        if len(self.train_params_history) == 1:
-            return self.train_params_history[0]
-        else:
-            return {"Run %d" % (i+1): v for i, v
-                    in enumerate(self.train_params_history)}
-
-    def save_params(self, filename="", logtime=True, logger=None):
-
-        model_params = {"model_name": self.model_name, "name": self.name,
-                        "n": self.n, "method": self.method}
-
-        model_params.update(self.model_params)
-
-        if logger is not None:
-            logger.save_json(model_params, filename, logtime)
-        else:
-            with open(filename, 'w') as f:
-                json.dump(model_params, f, indent=4)
-
     def fit(self, X, y=None, cv=False, train_params=None, filtering=True):
+        """
+        Train a model.
+
+        In Scikit, `fit()` erases any previous training. To train by batch,
+        it is necessary to use `partial_fit()` instead, but this method is
+        not defined for many models.
+        """
 
         # TODO: define method to fit one model, then apply for each model
         # if n > 1: this would allow to have models with different structures
 
         # filtering → apply filter (for outliers), by default yes
+        if train_params is None:
+            train_params = {}
 
-        # TODO: count model number trained
+        verbose = train_params.get("verbose", 0)
 
         if y is None:
             y = X
@@ -188,10 +181,16 @@ class Model:
         if self.outputs is not None:
             y = self.outputs(y, mode='flat')
 
-        # TODO: if verbose is in train_params, write which model is trained
+        # TODO: update history
 
         if self.n_models > 1:
-            return [m.fit(X, y) for m in self.model]
+            results = []
+            for i, m in enumerate(self.model):
+                if verbose > 0:
+                    print(f"\n# Training model {i+1}/{len(self.model)}\n")
+
+                results.append(m.fit(X, y))
+            return results
         else:
             return self.model.fit(X, y)
 
@@ -218,7 +217,7 @@ class Model:
                     return self.outputs.average(y)
                 else:
                     # if no data structure is defined, try simple average
-                    return datatools.average(y)
+                    return dt.average(y)
         else:
             y = self.model.predict(X)
 
@@ -227,49 +226,55 @@ class Model:
 
             return y
 
-    def update_history(self, history):
+    def update_train_history(self, history):
         """
         Update training history.
+
+        History is updated after each training. Values are simply concatenated
+        to each other, without distinguishing between the different trainings.
+        The number of epochs is also stored.
         """
 
-        # TODO: if early stopping, truncate to value for best model?
+        # if there is a single metric (= loss), history returned from
+        #  training is a list; convert to dict
+        if len(self.metrics) == 1:
+            if self.n_models > 1:
+                history = [{self.loss: h} for h in history]
+            else:
+                history = {self.loss: history}
 
         if self.n_models > 1:
-            # history can be of different lengths (for example due to early
-            # stopping)
+            history = dt.exchange_list_dict(history)
+
+            # history can be of different lengths (e.g. due to early stopping)
             # to solve this problem, we pad with the last data of each array
 
-            if isinstance(history[0], dict):
-                lengths = [len(list(h.values())[0]) for h in history]
-            else:
-                lengths = [len(h) for h in history]
+            for metric, hist in history.items():
+                # compute length of longest history to be used for padding
+                epochs = np.array([len(h) for h in hist]).reshape(1, -1)
+                max_length = np.max(epochs)
 
-            if len(lengths) > 1:
-                max_length = max(lengths)
+                # padding function: note that it is trivial when all histories
+                # have the same length
+                pad_data = lambda x: np.pad(x, (0, max_length - len(x)),
+                                            constant_values=x[-1])
 
-                if isinstance(history[0], dict):
-                    history = [{k: np.pad(v, (0, max_length - len(v)),
-                                          constant_values=v[-1])
-                                for k, v in h.items()}
-                               for h in history]
-                else:
-                    history = [np.pad(h, (0, max_length - len(h)),
-                                      constant_values=h[-1])
-                               for h in history]
-
-            hist, hist_std = datatools.average([h for h in history])
+                history[metric] = np.c_[tuple(pad_data(h) for h in hist)]
         else:
-            hist = history
-            hist_std = {}
+            epochs = len(history)
 
-        for metric, values in hist.items():
-            self.history[metric] = np.r_[self.history.get(metric, ()), values]
+        # update metric names
+        history = dict(zip(self.metrics, history.values()))
+        history['epochs'] = epochs
 
-        for metric, values in hist_std.items():
-            mstd = metric + "_std"
-            self.history[mstd] = np.r_[self.history.get(mstd, ()), values]
-
-        return {}
+        if self.history == {}:
+            # if no training has happened yet, use directly current history
+            self.history.update(history)
+        else:
+            # if training has already happened, merge history with previous
+            # history from previous runs
+            for metric, values in history.items():
+                self.history[metric] = np.r_[self.history[metric], values]
 
     def model_representation(self):
         """
@@ -283,11 +288,11 @@ class Model:
     def create_model(self):
         # useful for creating several models (for bagging, cross-validation...)
 
-        raise NotImplementedError("Trying to call abstract `Model` class. ")
+        raise NotImplementedError("Trying to call abstract `Model` class.")
 
     def save_model(self, file):
         # save weights
-        # save parameters (name...)
+        # save parameters
 
         raise NotImplementedError
 
@@ -295,10 +300,119 @@ class Model:
 
         raise NotImplementedError
 
-    def summary(self, save_params=True, filename=None, logtime=True,
-                logger=None):
+    def get_model_params(self, filename="", logtime=False, logger=None):
 
-        # TODO: make model summary (here instead of Predictions)
+        model_params = {"model_name": self.model_name,
+                        "n": self.n, "method": self.method}
 
-        # raise NotImplementedError
+        if self.name != "":
+            model_params["name"] = self.name
+
+        model_params.update(self.model_params)
+
+        if filename != "":
+            if logger is None:
+                logger = Logger(logtime="filename")
+
+            logger.save_json(model_params, filename=filename, logtime=logtime)
+
+        return model_params
+
+    def get_train_params(self, filename="", logtime=False, logger=None):
+        """
+        Return dict of train parameters.
+
+        If training has been made by steps, organize `dict` accordingly.
+
+        If filename is given, save in json file.
+        """
+
+        if len(self.train_params_history) == 1:
+            train_params = self.train_params_history[0]
+        else:
+            train_params = {"Run %d" % (i+1): v for i, v
+                            in enumerate(self.train_params_history)}
+
+        if filename != "":
+            if logger is None:
+                logger = Logger(logtime="filename")
+
+            logger.save_json(train_params, filename=filename, logtime=logtime)
+
+        return train_params
+
+    def get_train_history(self, average=True, filename="", logtime=False,
+                          logger=None):
+
+        # TODO: if early stopping, truncate to value for best model?
+
+        hist_std = {}
+
+        if self.n_models > 1 and average is True:
+            hist, hist_std = dt.average(self.history, axis=1)
+            hist.update((k + "_std", v) for k, v in hist_std.items())
+        else:
+            hist = self.history.copy()
+
+        if filename != "" and len(hist) > 0:
+            if logger is None:
+                logger = Logger(logtime="filename")
+
+            hist_json = {k: v.tolist() for k, v in hist.items()}
+            logger.save_json(hist_json, filename=filename, logtime=logtime)
+
+        return hist
+
+    def training_curve(self):
+
         pass
+
+    def summary(self, save_model_params=True, save_train_params=True,
+                save_history=True, filename="", logtime=False, logger=None,
+                show=False):
+
+        # TODO: save weights
+
+        if logger is None:
+            logger = Logger(logtime="filename")
+
+        text = ""
+        params = {}
+
+        model_params = self.get_model_params(filename="")
+
+        if save_model_params is True:
+            params["model_params"] = model_params
+
+        train_params = self.get_train_params()
+
+        if save_model_params is True:
+            params["train_params"] = train_params
+
+        if len(params) > 0 and filename != "":
+            logger.save_json(params, filename=filename + "_params.json",
+                             logtime=logtime)
+
+        if save_history is True and filename != "":
+            fname = filename + "_history.json"
+        else:
+            fname = ""
+        history = self.get_train_history(average=False, filename=fname,
+                                         logtime=logtime, logger=logger)
+
+        text += f"## Model - {self}\n\n"
+
+        if len(model_params) == 0:
+            text += "No model parameters"
+        else:
+            text += "Model parameters:\n"
+            text += logger.dict_to_text(model_params)
+
+        if len(train_params) > 0:
+            text += "\n\nTrain parameters:\n"
+            text += logger.dict_to_text(train_params)
+
+        if show is True:
+            print(text)
+
+        return text

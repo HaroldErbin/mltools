@@ -48,13 +48,22 @@ class NeuralNet(Model):
         if n > 1:
             self.submodels = [self.create_model() for n in range(self.n)]
             self.model = [m["model"] for m in self.submodels]
+            model = self.model[0]
         else:
             # dict of models
             self.submodels = self.create_model()
             # main model
             self.model = self.submodels["model"]
+            model = self.model
 
         self.model_name = "Neural Network"
+
+        # read loss and metric names from model parameters, otherwise
+        # read from Keras model
+        self.loss = self.model_params.get('loss', model.loss)
+        self.metrics = self.model_params.get('metrics',
+                                             [model.loss]
+                                             + model.metrics_names[1:])
 
     def create_model(self):
         return self.model_fn(self.inputs, self.outputs, **self.model_params)
@@ -75,6 +84,8 @@ class NeuralNet(Model):
         # TODO: define default train parameters
         if train_params is None:
             train_params = {}
+
+        verbose = train_params.get("verbose", 0)
 
         self.train_params_history.append(train_params)
 
@@ -158,6 +169,9 @@ class NeuralNet(Model):
             history = []
 
             for i, m in enumerate(self.model):
+                if verbose > 0:
+                    print(f"\n# Training model {i+1}/{len(self.model)}\n")
+
                 h = m.fit(X, y, validation_data=val_data,
                           callbacks=callbacks, **params)
 
@@ -170,11 +184,11 @@ class NeuralNet(Model):
                 except OSError:
                     pass
 
-            self.update_history([h.history for h in history])
+            self.update_train_history([h.history for h in history])
         else:
             history = self.model.fit(X, y, validation_data=val_data,
                                      callbacks=callbacks, **params)
-            self.update_history(history.history)
+            self.update_train_history(history.history)
 
             if early_stopping is not None:
                 try:
@@ -272,16 +286,26 @@ class NeuralNet(Model):
     def transform_pred(self, data):
 
         if self.n_models > 1:
+            nn_type = set(map(type, self.model))
             model = self.model[0]
+
+            if len(nn_type) > 1:
+                raise ValueError("Cannot handle ensemble of neural networks "
+                                 "of different types.")
+            nn_type = nn_type.pop()
         else:
+            nn_type = type(self.model)
             model = self.model
 
-        if len(model.output_names) > 1:
-            data = dict(zip(model.output_names, data))
+        if nn_type == keras.models.Sequential:
+            return data
         else:
-            data = {model.output_names[0]: data}
+            if len(model.output_names) > 1:
+                data = dict(zip(model.output_names, data))
+            else:
+                data = {model.output_names[0]: data}
 
-        return {k.rstrip('_output'): v for k, v in data.items()}
+            return {k.rstrip('_output'): v for k, v in data.items()}
 
 
 def deep_model():
