@@ -551,7 +551,8 @@ class Predictions:
 
     def summary(self, mode="", training_metrics=None, sigma=1,
                 signed_errors=True, density=True, bins=None, log=False,
-                filename="", logtime=True, show=False, extra_figs=None):
+                include_io=False, filename="", logtime=True, show=False,
+                extra_figs=None):
 
         # TODO: add information on inputs/outputs
         # TODO: add the number of models
@@ -648,25 +649,28 @@ class Predictions:
         figs.append(self.logger.text_to_fig(model_text))
 
         # page on input and output data structures
-        io_text = ""
+        # note: useful only if different from `model`
+        if include_io is True:
+            io_text = ""
 
-        if self.inputs is not None:
-            name = self.inputs.name or "Inputs"
-            io_text += self.inputs.summary(name=name)
-            io_text += "\n"
+            if self.inputs is not None:
+                io_text += "\n"
+                name = self.inputs.name or "Inputs"
+                io_text += self.inputs.summary(name=name)
 
-        if self.outputs is not None:
-            name = self.outputs.name or "Outputs"
-            io_text += self.outputs.summary(name=name)
-            io_text += "\n"
+            if self.outputs is not None:
+                io_text += "\n\n"
+                name = self.outputs.name or "Outputs"
+                io_text += self.outputs.summary(name=name)
+                io_text += "\n"
 
-        if io_text != "":
-            io_text = "## Inputs and outputs\n\n" + io_text
-            figs.append(self.logger.text_to_fig(io_text))
+            if io_text != "":
+                io_text = "## Inputs and outputs\n\n" + io_text
+                figs.append(self.logger.text_to_fig(io_text))
 
-        if show is True:
-            print()
-            print(io_text)
+            if show is True:
+                print()
+                print(io_text)
 
         # additional figures created outside the function
         if extra_figs is not None:

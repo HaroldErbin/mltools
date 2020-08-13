@@ -20,8 +20,6 @@ import seaborn as sns
 
 # TODO: prevent display of graphs
 
-# TODO: custom plot method: take logger instance as argument
-
 
 STYLES = {"color:true": "tab:blue",
           "color:pred": "tab:green",

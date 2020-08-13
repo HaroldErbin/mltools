@@ -549,3 +549,80 @@ def importance_text(importances):
     text = text.strip("\n")
 
     return text
+
+
+def training_curve(history, history_err=None, metric=None, log=True,
+                   marker=None, filename="", logtime=False, logger=None):
+    """
+    Plot evolution of metrics during training.
+
+    `history` can be:
+    - 1d array: metric values which name is given by `metric`
+    - dict: set of metric values, with name given by the key, filtered
+            using `metric`
+    For arrays, the metric name is set by the `metric` argument, which takes
+    the default value `loss` in this case. For a dict, `metric` can be a
+    string or a list of names (if `None`, all keys are used).
+    Standard deviations are given either by the argument `history_err` of
+    the same format as `history`, or by keys ending with `_std` if `history`
+    is a dict.
+    """
+
+    # TODO: improve and make more generic
+
+    history = history or self.model.history
+
+    if history is None or len(history) == 0:
+        return
+
+    if isinstance(history, dict):
+        val_history_std = history.get("val_%s_std" % metric, None)
+        val_history = history.get("val_" + metric, None)
+        history_std = history.get(metric + "_std", None)
+        history = history[metric]
+    else:
+        val_history = None
+        val_history_std = None
+        history_std = None
+
+    fig, ax = plt.subplots()
+
+    logger = self.logger or Logger
+    styles = logger.styles
+
+    steps = np.arange(1, len(history)+1, dtype=int)
+
+    ax.plot(steps, history[:], linestyle='solid', marker=marker,
+            color=styles["color:train"], label=styles["label:train"])
+
+    if history_std is not None:
+        ax.fill_between(steps, history - history_std,
+                        history + history_std,
+                        alpha=0.3, color=styles["color:train"])
+
+    if val_history is not None:
+        ax.plot(steps, val_history, linestyle='solid', marker=marker,
+                color=styles["color:val"], label=styles["label:val"])
+
+        if val_history_std is not None:
+            ax.fill_between(steps, val_history - val_history_std,
+                            val_history + val_history_std,
+                            alpha=0.3, color=styles["color:val"])
+
+    # TODO: plot position of best model if early stopping
+    #       it is located at total_step - wait_step
+
+    ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(integer=True))
+
+    ax.legend()
+
+    ax.set_xlabel('epochs')
+    ax.set_ylabel(metric)
+
+    if log is True:
+        ax.set_yscale('log')
+
+    if self.logger is not None:
+        self.logger.save_fig(fig, filename=filename, logtime=logtime)
+
+    return fig

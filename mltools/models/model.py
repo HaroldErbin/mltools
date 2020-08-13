@@ -368,8 +368,8 @@ class Model:
         pass
 
     def summary(self, save_model_params=True, save_train_params=True,
-                save_history=True, filename="", logtime=False, logger=None,
-                show=False):
+                save_history=True, save_io=True,
+                filename="", logtime=False, logger=None, show=False):
 
         # TODO: save weights
 
@@ -379,28 +379,13 @@ class Model:
         text = ""
         params = {}
 
+        text += f"## Model - {self}\n\n"
+
+        # model parameters
         model_params = self.get_model_params(filename="")
 
         if save_model_params is True:
             params["model_params"] = model_params
-
-        train_params = self.get_train_params()
-
-        if save_model_params is True:
-            params["train_params"] = train_params
-
-        if len(params) > 0 and filename != "":
-            logger.save_json(params, filename=filename + "_params.json",
-                             logtime=logtime)
-
-        if save_history is True and filename != "":
-            fname = filename + "_history.json"
-        else:
-            fname = ""
-        history = self.get_train_history(average=False, filename=fname,
-                                         logtime=logtime, logger=logger)
-
-        text += f"## Model - {self}\n\n"
 
         if len(model_params) == 0:
             text += "No model parameters"
@@ -408,11 +393,49 @@ class Model:
             text += "Model parameters:\n"
             text += logger.dict_to_text(model_params)
 
+        # train parameters
+        train_params = self.get_train_params()
+
+        if save_model_params is True:
+            params["train_params"] = train_params
+
         if len(train_params) > 0:
             text += "\n\nTrain parameters:\n"
             text += logger.dict_to_text(train_params)
 
+        # inputs and outputs
+        if self.inputs is not None:
+            name = self.inputs.name or "Inputs"
+
+            if save_io is True:
+                params["inputs"] = self.inputs.summary(name=name)
+
+            text += "\n\n"
+            text += self.inputs.summary(name=name, mode='text')
+
+        if self.outputs is not None:
+            name = self.outputs.name or "Outputs"
+
+            if save_io is True:
+                params["outputs"] = self.outputs.summary(name=name)
+
+            text += "\n\n"
+            text += self.outputs.summary(name=name, mode='text')
+
+        # history
+        if save_history is True and filename != "":
+            fname = filename + "_history.json"
+        else:
+            fname = ""
+        history = self.get_train_history(average=False, filename=fname,
+                                         logtime=logtime, logger=logger)
+
+        # display text and save
         if show is True:
             print(text)
+
+        if len(params) > 0 and filename != "":
+            logger.save_json(params, filename=filename + "_params.json",
+                             logtime=logtime)
 
         return text

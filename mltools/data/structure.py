@@ -383,31 +383,38 @@ class DataStructure:
         return datatools.average(ensemble)
 
     def summary(self, name="", filename="", logtime=False,
-                logger=None, show=False):
+                logger=None, show=False, mode='dict'):
         """
         Summary of the data structure.
+
+        The name can be changed using the `name` parameter.
         """
 
+        dic = {}
         text = ""
 
         if name == "":
             name = self.name or "Features"
 
-        text += f"{name}:\n"
-
-        for feature in self.features:
-            text += f"- {feature}\n"
+        dic = {"name": name, "features": self.features}
 
         # TODO: add filter infos
         # TODO: add scaling infos
+
+        text += f"{name}:\n"
+
+        text += '\n'.join(f"- {feature}" for feature in self.features)
 
         if filename != "":
             if logger is None:
                 logger = Logger(logtime="filename")
 
-            logger.save_text(text, filename=filename, logtime=logtime)
+            logger.save_json(dic, filename=filename, logtime=logtime)
 
         if show is True:
             print(text)
 
-        return text
+        if mode == 'text':
+            return text
+        else:
+            return dic
