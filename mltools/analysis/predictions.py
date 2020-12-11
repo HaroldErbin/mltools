@@ -501,7 +501,7 @@ class Predictions:
         logger = self.logger or Logger
         styles = logger.styles
 
-        steps = np.arange(1, len(history)+1, dtype=int)
+        steps = np.arange(1, len(history) + 1, dtype=int)
 
         ax.plot(steps, history[:], linestyle='solid', marker=marker,
                 color=styles["color:train"], label=styles["label:train"])

@@ -62,8 +62,7 @@ class NeuralNet(Model):
         # read from Keras model
         self.loss = self.model_params.get('loss', model.loss)
         self.metrics = self.model_params.get('metrics',
-                                             [model.loss]
-                                             + model.metrics_names[1:])
+                                             list({model.loss} | set(model.metrics_names[1:])))
 
     def create_model(self):
         return self.model_fn(self.inputs, self.outputs, **self.model_params)
@@ -188,6 +187,7 @@ class NeuralNet(Model):
         else:
             history = self.model.fit(X, y, validation_data=val_data,
                                      callbacks=callbacks, **params)
+
             self.update_train_history(history.history)
 
             if early_stopping is not None:
@@ -200,6 +200,8 @@ class NeuralNet(Model):
         return history
 
     def predict(self, X, return_all=False):
+
+        # note: predict() resets model.history
 
         X = self.transform_data(X, self.inputs)
 
@@ -302,8 +304,8 @@ class NeuralNet(Model):
         else:
             if len(model.output_names) > 1:
                 data = dict(zip(model.output_names, data))
-            else:
-                data = {model.output_names[0]: data}
+            # else:
+            #     data = {model.output_names[0]: data}
 
             return {k.rstrip('_output'): v for k, v in data.items()}
 

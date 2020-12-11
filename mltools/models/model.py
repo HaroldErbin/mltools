@@ -176,6 +176,10 @@ class Model:
         if y is None:
             y = X
 
+        if "train" in X and "train" in y:
+            X = X['train']
+            y = y['train']
+
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
         if self.outputs is not None:
@@ -235,13 +239,17 @@ class Model:
         The number of epochs is also stored.
         """
 
+        # print(history)
+
+        history = history.copy()
+
         # if there is a single metric (= loss), history returned from
-        #  training is a list; convert to dict
+        # training is a list; convert to dict
         if len(self.metrics) == 1:
             if self.n_models > 1:
-                history = [{self.loss: h} for h in history]
+                history = [{self.loss: h[self.loss]} for h in history]
             else:
-                history = {self.loss: history}
+                history = {self.loss: np.array(history[self.loss])}
 
         if self.n_models > 1:
             history = dt.exchange_list_dict(history)
@@ -261,7 +269,7 @@ class Model:
 
                 history[metric] = np.c_[tuple(pad_data(h) for h in hist)]
         else:
-            epochs = len(history)
+            epochs = len(history[self.loss])
 
         # update metric names
         history = dict(zip(self.metrics, history.values()))
@@ -358,7 +366,7 @@ class Model:
             if logger is None:
                 logger = Logger(logtime="filename")
 
-            hist_json = {k: v.tolist() for k, v in hist.items()}
+            hist_json = {k: v.tolist() for k, v in hist.items() if k != "epochs"}
             logger.save_json(hist_json, filename=filename, logtime=logtime)
 
         return hist
