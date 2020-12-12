@@ -60,9 +60,11 @@ class NeuralNet(Model):
 
         # read loss and metric names from model parameters, otherwise
         # read from Keras model
+
+        # TODO: metric names in Keras are not abbreviated
         self.loss = self.model_params.get('loss', model.loss)
         self.metrics = self.model_params.get('metrics',
-                                             list({model.loss} | set(model.metrics_names[1:])))
+                                             list({self.loss} | set(model.metrics_names[1:])))
 
     def create_model(self):
         return self.model_fn(self.inputs, self.outputs, **self.model_params)

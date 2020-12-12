@@ -239,19 +239,22 @@ class Model:
         The number of epochs is also stored.
         """
 
-        # print(history)
+        # TODO: keep loss (information on regularization)
+        # TODO: keep all metrics, filter when plotting
 
         history = history.copy()
 
-        # if there is a single metric (= loss), history returned from
+        # if there is a single metric (= loss), the history returned from
         # training is a list; convert to dict
-        if len(self.metrics) == 1:
-            if self.n_models > 1:
-                history = [{self.loss: h[self.loss]} for h in history]
-            else:
-                history = {self.loss: np.array(history[self.loss])}
+        if isinstance(history, list) and self.n_models == 1:
+            history = {"loss": np.array(history)}
 
         if self.n_models > 1:
+
+            if isinstance(history[0], list):
+                # convert history lists to dict
+                history = [{'loss': h} for h in history]
+
             history = dt.exchange_list_dict(history)
 
             # history can be of different lengths (e.g. due to early stopping)
@@ -260,6 +263,7 @@ class Model:
             for metric, hist in history.items():
                 # compute length of longest history to be used for padding
                 epochs = np.array([len(h) for h in hist]).reshape(1, -1)
+
                 max_length = np.max(epochs)
 
                 # padding function: note that it is trivial when all histories
@@ -269,10 +273,11 @@ class Model:
 
                 history[metric] = np.c_[tuple(pad_data(h) for h in hist)]
         else:
-            epochs = len(history[self.loss])
+            epochs = len(history["loss"])
+            history = {k: np.array(v) for k, v in history.items()}
 
         # update metric names
-        history = dict(zip(self.metrics, history.values()))
+        # history = dict(zip(self.metrics, history.values()))
         history['epochs'] = epochs
 
         if self.history == {}:

@@ -467,8 +467,8 @@ class Predictions:
                    .plot_feature_errors(sigma, signed_errors, density, bins,
                                         log, filename, logtime, **kwargs)
 
-    def training_curve(self, metric='loss', history=None, log=True,
-                       marker=None, filename="", logtime=False):
+    def training_curve(self, metric='loss', history=None, history_std=None,
+                       log=True, marker=None, filename="", logtime=False):
         """
         Loss evolution during training.
 
@@ -481,18 +481,24 @@ class Predictions:
 
         # TODO: improve and make more generic
 
-        history = history or self.model.history
+        if history is None:
+            history = self.model.history.copy()
+            if self.model.n_models > 1:
+                history, history_std = datatools.average(history)
 
         if history is None or len(history) == 0:
             return
 
         if isinstance(history, dict):
-            val_history_std = history.get("val_%s_std" % metric, None)
-            val_history = history.get("val_" + metric, None)
-            history_std = history.get(metric + "_std", None)
+            val_history = history.get(f"val_{metric}", None)
             history = history[metric]
         else:
             val_history = None
+
+        if isinstance(history_std, dict):
+            val_history_std = history_std.get(f"val_{metric}", None)
+            history_std = history_std.get(metric, None)
+        else:
             val_history_std = None
             history_std = None
 
@@ -632,14 +638,15 @@ class Predictions:
                                      log=log)
 
         # training curves
+        # TODO: by default, plot curves for all model metrics
         if training_metrics is None:
-            training_figs = [self.training_curve(log=True)]
+            training_metrics = self.model.metrics
         else:
-            if not isinstance(training_metrics, (tuple, list)):
+            if isinstance(training_metrics, str):
                 training_metrics = [training_metrics]
 
-            training_figs = [self.training_curve(log=True, metric=metric)
-                             for metric in training_metrics]
+        training_figs = [self.training_curve(log=True, metric=metric)
+                         for metric in training_metrics]
         figs += [fig for fig in training_figs if fig is not None]
 
         # page on model information
