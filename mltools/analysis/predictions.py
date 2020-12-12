@@ -502,6 +502,13 @@ class Predictions:
             val_history_std = None
             history_std = None
 
+        if log is True:
+            # error bar in log scale is given by rescaled relative error
+            # TODO: create function to compute it
+            history_std *= np.log10(np.e) / history
+            if val_history_std is not None:
+                val_history_std *= np.log10(np.e) / val_history
+
         fig, ax = plt.subplots()
 
         logger = self.logger or Logger
