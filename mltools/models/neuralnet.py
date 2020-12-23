@@ -151,6 +151,8 @@ class NeuralNet(Model):
             X = X['train']
             y = y['train']
 
+        begin_process = time.monotonic()
+
         # add tests in the function?
         X = self.transform_data(X, self.inputs)
         y = self.transform_data(y, self.outputs)
@@ -163,20 +165,25 @@ class NeuralNet(Model):
         else:
             val_data = None
 
+        process_time = time.monotonic() - begin_process
+
         # TODO: add method to prefix keys with inputs/outputs/aux, etc.
 
         # train Keras model which returns history
         if self.n_models > 1:
-            history = []
+            train_time = []
+            losses = []
 
             for i, m in enumerate(self.model):
                 if verbose > 0:
                     print(f"\n# Training model {i+1}/{len(self.model)}\n")
 
-                h = m.fit(X, y, validation_data=val_data,
-                          callbacks=callbacks, **params)
+                begin_train = time.monotonic()
 
-                history.append(h)
+                history = m.fit(X, y, validation_data=val_data, callbacks=callbacks, **params)
+
+                losses.append(history.history)
+                train_time.append(time.monotonic() - begin_train)
 
             if early_stopping is not None:
                 try:
@@ -185,19 +192,23 @@ class NeuralNet(Model):
                 except OSError:
                     pass
 
-            self.update_train_history([h.history for h in history])
         else:
-            history = self.model.fit(X, y, validation_data=val_data,
-                                     callbacks=callbacks, **params)
+            begin_train = time.monotonic()
 
-            self.update_train_history(history.history)
+            history = self.model.fit(X, y, validation_data=val_data, callbacks=callbacks, **params)
+
+            train_time = time.monotonic() - begin_train
+
+            losses = history.history
 
             if early_stopping is not None:
                 try:
-                    self.model = keras.models.load_model(modelfile)
+                    # self.model = keras.models.load_model(modelfile)
                     os.remove(modelfile)
                 except OSError:
                     pass
+
+        history = self.update_train_history(losses, train_time, process_time)
 
         return history
 

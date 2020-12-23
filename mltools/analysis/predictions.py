@@ -481,12 +481,16 @@ class Predictions:
 
         # TODO: improve and make more generic
 
+        # TODO: in Model, add as private attribute
+        non_metric_keys = {"epochs", "train_time", "process_time"}
+
         if history is None:
             history = self.model.history.copy()
+
             if self.model.n_models > 1:
                 history, history_std = datatools.average(history)
 
-        if history is None or len(history) == 0:
+        if history is None or len(set(history.keys()) - non_metric_keys) == 0:
             return
 
         if isinstance(history, dict):

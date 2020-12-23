@@ -2,6 +2,7 @@
 Generic model class.
 """
 
+import time
 import json
 
 import numpy as np
@@ -180,23 +181,43 @@ class Model:
             X = X['train']
             y = y['train']
 
+        begin_process = time.monotonic()
+
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
         if self.outputs is not None:
             y = self.outputs(y, mode='flat')
 
+        process_time = time.monotonic() - begin_process
+
         # TODO: update history
 
         if self.n_models > 1:
+            # TODO: if using scikit to train on multi-core, not sure that it will be possible
+            #       to time each model individually (if not, do a mean)
+
+            train_time = []
             results = []
+
             for i, m in enumerate(self.model):
                 if verbose > 0:
                     print(f"\n# Training model {i+1}/{len(self.model)}\n")
 
+                begin_train = time.monotonic()
+
                 results.append(m.fit(X, y))
-            return results
+
+                train_time.append(time.monotonic() - begin_train)
         else:
-            return self.model.fit(X, y)
+            begin_train = time.monotonic()
+
+            results = self.model.fit(X, y)
+
+            train_time = time.monotonic() - begin_train
+
+        history = self.update_train_history(train_time=train_time, process_time=process_time)
+
+        return history
 
     def predict(self, X, return_all=False, filtering=False):
 
@@ -230,65 +251,84 @@ class Model:
 
             return y
 
-    def update_train_history(self, history):
+    def update_train_history(self, losses=None, train_time=None, process_time=None):
         """
         Update training history.
 
         History is updated after each training. Values are simply concatenated
         to each other, without distinguishing between the different trainings.
         The number of epochs is also stored.
+
+        When training a bag of neural networks, the number of epochs can be different if using
+        early stopping. To fix this issue, each loss array is padded with its last value until they
+        all have the same length.
         """
 
         # TODO: keep loss (information on regularization)
         # TODO: keep all metrics, filter when plotting
 
-        history = history.copy()
+        history = {}
 
-        # if there is a single metric (= loss), the history returned from
-        # training is a list; convert to dict
-        if isinstance(history, list) and self.n_models == 1:
-            history = {"loss": np.array(history)}
+        if train_time is not None:
+            history['train_time'] = np.array(train_time)
+            if self.n_models > 1:
+                history['train_time'] = history['train_time'].reshape(1, -1)
 
-        if self.n_models > 1:
+        if process_time is not None:
+            history['process_time'] = np.array(process_time)
+            if self.n_models > 1:
+                history['process_time'] = history['process_time'].reshape(1, -1)
 
-            if isinstance(history[0], list):
-                # convert history lists to dict
-                history = [{'loss': h} for h in history]
+        if losses is not None:
+            losses = losses.copy()
 
-            history = dt.exchange_list_dict(history)
+            # if there is a single metric (= loss), the history returned from training is a list
+            # convert to dict
+            if isinstance(losses, list) and self.n_models == 1:
+                losses = {"loss": np.array(losses)}
 
-            # history can be of different lengths (e.g. due to early stopping)
-            # to solve this problem, we pad with the last data of each array
+            if self.n_models > 1:
 
-            for metric, hist in history.items():
-                # compute length of longest history to be used for padding
-                epochs = np.array([len(h) for h in hist]).reshape(1, -1)
+                if isinstance(losses[0], list):
+                    # convert history lists to dict
+                    losses = [{'loss': loss} for loss in losses]
 
-                max_length = np.max(epochs)
+                losses = dt.exchange_list_dict(losses)
 
-                # padding function: note that it is trivial when all histories
-                # have the same length
-                pad_data = lambda x: np.pad(x, (0, max_length - len(x)),
-                                            constant_values=x[-1])
+                # losses can be of different lengths (e.g. due to early stopping)
+                # to solve this problem, we pad with the last data of each array
+                for metric, hist in losses.items():
+                    # compute length of longest history to be used for padding
+                    epochs = np.reshape([len(h) for h in hist], (1, -1))
 
-                # TODO: check if transpose is optimal
-                history[metric] = np.c_[tuple(pad_data(h) for h in hist)].T
-        else:
-            epochs = len(history["loss"])
-            history = {k: np.array(v) for k, v in history.items()}
+                    max_length = np.max(epochs)
 
-        # update metric names
-        # history = dict(zip(self.metrics, history.values()))
-        history['epochs'] = epochs
+                    # padding function: note that it is trivial when all histories
+                    # have the same length
+                    pad_data = lambda x: np.pad(x, (0, max_length - len(x)),
+                                                constant_values=x[-1])
 
-        if self.history == {}:
+                    # TODO: check if transpose is optimal
+                    history[metric] = np.c_[tuple(pad_data(h) for h in hist)].T
+            else:
+                epochs = np.array(len(losses["loss"]))
+                history.update({k: np.array(v) for k, v in losses.items()})
+
+            # update metric names (not needed)
+            # history = dict(zip(self.metrics, history.values()))
+
+            history['epochs'] = epochs
+
+        if len(self.history) == 0:
             # if no training has happened yet, use directly current history
             self.history.update(history)
         else:
             # if training has already happened, merge history with previous
             # history from previous runs
-            for metric, values in history.items():
-                self.history[metric] = np.r_[self.history[metric], values]
+            for key, val in history.items():
+                self.history[key] = np.r_[self.history[key], val]
+
+        return history
 
     def model_representation(self):
         """
@@ -355,10 +395,7 @@ class Model:
 
         return train_params
 
-    def get_train_history(self, average=True, filename="", logtime=False,
-                          logger=None):
-
-        # TODO: if early stopping, truncate to value for best model?
+    def get_train_history(self, average=True, filename="", logtime=False, logger=None):
 
         hist_std = {}
 
@@ -372,7 +409,7 @@ class Model:
             if logger is None:
                 logger = Logger(logtime="filename")
 
-            hist_json = {k: v.tolist() for k, v in hist.items() if k != "epochs"}
+            hist_json = {k: v.tolist() for k, v in hist.items()}
             logger.save_json(hist_json, filename=filename, logtime=logtime)
 
         return hist
@@ -441,8 +478,8 @@ class Model:
             fname = filename + "_history.json"
         else:
             fname = ""
-        history = self.get_train_history(average=False, filename=fname,
-                                         logtime=logtime, logger=logger)
+        history = self.get_train_history(average=False, filename=fname, logtime=logtime,
+                                         logger=logger)
 
         # display text and save
         if show is True:
