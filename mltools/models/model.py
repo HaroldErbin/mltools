@@ -271,7 +271,8 @@ class Model:
                 pad_data = lambda x: np.pad(x, (0, max_length - len(x)),
                                             constant_values=x[-1])
 
-                history[metric] = np.c_[tuple(pad_data(h) for h in hist)]
+                # TODO: check if transpose is optimal
+                history[metric] = np.c_[tuple(pad_data(h) for h in hist)].T
         else:
             epochs = len(history["loss"])
             history = {k: np.array(v) for k, v in history.items()}
