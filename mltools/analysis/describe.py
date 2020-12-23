@@ -57,11 +57,11 @@ def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
     # TODO: PDF has a problem sometimes (see CICY)
 
     logger = logger or Logger
+    styles = logger.styles
 
-    with sns.axes_style("whitegrid"):
-        fig, ax = plt.subplots()
+    fig, ax = plt.subplots()
 
-    linewidth = 1.5
+    linewidth = styles["linewidth:hist"]
 
     alpha = logger.styles["alpha:hist"]
     alpha_err = logger.styles["alpha:err"]

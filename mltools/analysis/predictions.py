@@ -502,7 +502,7 @@ class Predictions:
             val_history_std = None
             history_std = None
 
-        if log is True:
+        if log is True and history_std is not None:
             # error bar in log scale is given by rescaled relative error
             # TODO: create function to compute it
             history_std *= np.log10(np.e) / history
@@ -953,7 +953,7 @@ class TensorPredictions:
             label = [styles["label:pred"], styles["label:true"]]
             color = [styles["color:pred"], styles["color:true"]]
 
-            values, bins, _ = ax.hist([pred, true], linewidth=1.5,
+            values, bins, _ = ax.hist([pred, true], linewidth=styles["linewidth:hist"],
                                       histtype='step', bins=bins,
                                       density=density, log=log,
                                       label=label, color=color)
@@ -972,6 +972,7 @@ class TensorPredictions:
                     norm=False):
 
         logger = self.logger or Logger
+        styles = logger.styles
 
         # errors defined without sign in [Skiena, p. 222]
 
@@ -1017,9 +1018,9 @@ class TensorPredictions:
         # TODO: find better way
         err = np.array([e for e in errors if e != np.inf])
 
-        ax.hist(err, linewidth=1., histtype='step', bins=bins,
+        ax.hist(err, linewidth=styles["linewidth:hist"], histtype='step', bins=bins,
                 density=density, log=log,
-                color=logger.styles["color:errors"])
+                color=styles["color:errors"])
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)

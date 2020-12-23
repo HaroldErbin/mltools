@@ -32,6 +32,8 @@ STYLES = {"color:true": "tab:blue",
           "label:train": "train",
           "label:val": "validation",
           "label:test": "test",
+          "linewidth:hist": 1.5,
+          "linewidth:line": 1.5,
           "print:float": "{:.3f}",
           "print:percent": "{:.2%}",
           "print:datetime": "%Y-%m-%d %H:%M:%S",
@@ -39,7 +41,8 @@ STYLES = {"color:true": "tab:blue",
           # alpha parameter for displaying histograms
           "alpha:hist": 0.3,
           # alpha parameter for displaying errors
-          "alpha:err": 0.2
+          "alpha:err": 0.2,
+          "despine": True
           }
 
 
@@ -60,7 +63,7 @@ class Logger:
     styles = STYLES
 
     def __init__(self, path="", prefix="", suffix="", logtime="folder",
-                 logtime_fmt="%Y-%m-%d-%H%M%S", palette="muted"):
+                 logtime_fmt="%Y-%m-%d-%H%M%S"):
         """
         Inits Logger
 
@@ -100,7 +103,22 @@ class Logger:
         self.logtime_fmt = logtime_fmt
         self.reset_time()
 
+        self.config_plot()
+
+    def config_plot(self, style="white", ticks=True, despine=True, font_scale=1.2,
+                    palette="muted"):
+
+        sns.set_theme(style=style, font_scale=font_scale)
+
+        if ticks is True:
+            sns.set_style("ticks")
+
         sns.set_palette(palette)
+
+        if despine is True:
+            plt.rc("axes.spines", top=False, right=False)
+        elif despine is not False:
+            plt.rc("axes.spines", **despine)
 
     def __repr__(self):
         string = "<Logger, base = {}, logtime = {}>"
