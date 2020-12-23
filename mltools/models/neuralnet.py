@@ -151,7 +151,7 @@ class NeuralNet(Model):
             X = X['train']
             y = y['train']
 
-        begin_process = time.monotonic()
+        begin_preprocess = time.monotonic()
 
         # add tests in the function?
         X = self.transform_data(X, self.inputs)
@@ -165,7 +165,7 @@ class NeuralNet(Model):
         else:
             val_data = None
 
-        process_time = time.monotonic() - begin_process
+        preprocess_time = time.monotonic() - begin_preprocess
 
         # TODO: add method to prefix keys with inputs/outputs/aux, etc.
 
@@ -208,7 +208,7 @@ class NeuralNet(Model):
                 except OSError:
                     pass
 
-        history = self.update_train_history(losses, train_time, process_time)
+        history = self.update_train_history(losses, train_time, preprocess_time)
 
         return history
 

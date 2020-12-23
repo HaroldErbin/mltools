@@ -482,7 +482,7 @@ class Predictions:
         # TODO: improve and make more generic
 
         # TODO: in Model, add as private attribute
-        non_metric_keys = {"epochs", "train_time", "process_time"}
+        non_metric_keys = {"epochs", "train_time", "preprocess_time", "lr"}
 
         if history is None:
             history = self.model.history.copy()
@@ -596,8 +596,13 @@ class Predictions:
                             .format(self.logger.logtime_text())
         else:
             intro_text = "# Summary\n\n"
+
         intro_text += "Selected metrics:\n"
         intro_text += self.all_feature_metric(mode="text")
+
+        intro_text += "\n\nTraining time:\n"
+        # intro_text += "\n" if self.model.n_models > 1 else " "
+        intro_text += self.model.get_training_time(mode="text")
 
         figs.append(self.logger.text_to_fig(intro_text))
 

@@ -181,14 +181,14 @@ class Model:
             X = X['train']
             y = y['train']
 
-        begin_process = time.monotonic()
+        begin_preprocess = time.monotonic()
 
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
         if self.outputs is not None:
             y = self.outputs(y, mode='flat')
 
-        process_time = time.monotonic() - begin_process
+        preprocess_time = time.monotonic() - begin_preprocess
 
         # TODO: update history
 
@@ -215,7 +215,7 @@ class Model:
 
             train_time = time.monotonic() - begin_train
 
-        history = self.update_train_history(train_time=train_time, process_time=process_time)
+        history = self.update_train_history(train_time=train_time, preprocess_time=preprocess_time)
 
         return history
 
@@ -251,7 +251,7 @@ class Model:
 
             return y
 
-    def update_train_history(self, losses=None, train_time=None, process_time=None):
+    def update_train_history(self, losses=None, train_time=None, preprocess_time=None):
         """
         Update training history.
 
@@ -274,10 +274,10 @@ class Model:
             if self.n_models > 1:
                 history['train_time'] = history['train_time'].reshape(1, -1)
 
-        if process_time is not None:
-            history['process_time'] = np.array(process_time)
+        if preprocess_time is not None:
+            history['preprocess_time'] = np.array(preprocess_time)
             if self.n_models > 1:
-                history['process_time'] = history['process_time'].reshape(1, -1)
+                history['preprocess_time'] = history['preprocess_time'].reshape(1, -1)
 
         if losses is not None:
             losses = losses.copy()
@@ -413,6 +413,72 @@ class Model:
             logger.save_json(hist_json, filename=filename, logtime=logtime)
 
         return hist
+
+    def get_training_time(self, include_preprocess=True, mode=None):
+        """
+        Return the total training time.
+
+        For a bag of models, return all the mean training time and standard deviation.
+        """
+
+        times = {}
+
+        if self.n_models > 1:
+            train_time, train_time_std = dt.average(self.history["train_time"], axis=1)
+            times["train_time"] = np.sum(train_time)
+            times["train_time_std"] = np.sum(train_time_std)
+
+            times["total_train_time"] = np.sum(self.history["train_time"])
+
+            if include_preprocess is True:
+                preprocess_time, preprocess_time_std = dt.average(self.history["preprocess_time"],
+                                                                  axis=1)
+                times["preprocess_time"] = np.sum(preprocess_time)
+                times["preprocess_time_std"] = np.sum(preprocess_time_std)
+
+                times["total_train_time"] += np.sum(self.history["preprocess_time"])
+
+        else:
+            times["train_time"] = np.sum(self.history["train_time"])
+
+            times["total_train_time"] = times["train_time"]
+
+            if include_preprocess is True:
+                times["preprocess_time"] = self.history["preprocess_time"]
+
+                times["total_train_time"] += times["preprocess_time"]
+
+        if mode == "text":
+            times = {k: Logger.format_time(v) for k, v in times.items()}
+
+            # get length of longest time string to align
+            val_maxlen = max(map(len, (times["total_train_time"], times["train_time"],
+                                       times.get("preprocessing_time", ""))))
+            val_fmt = "- {:<14} {:>%d}\n" % val_maxlen
+
+            if self.n_models > 1:
+                std_maxlen = max(map(len, (times["train_time_std"],
+                                           times.get("preprocessing_time_std", ""))))
+                valstd_fmt = "- {:<14} {:>%d} ± {:>%d}\n" % (val_maxlen, std_maxlen)
+
+                text = val_fmt.format("total", times["total_train_time"])
+
+                text += valstd_fmt.format("training", times["train_time"], times["train_time_std"])
+
+                if include_preprocess is True:
+                    text += valstd_fmt.format("preprocessing", times["preprocess_time"],
+                                              times["preprocess_time_std"])
+            else:
+                if include_preprocess is True:
+                    text = val_fmt.format("total", times["total_train_time"])
+                    text += val_fmt.format("training", times["train_time"])
+                    text += val_fmt.format("preprocessing", times["preprocess_time"])
+                else:
+                    text = times["total_train_time"]
+
+            return text
+        else:
+            return times
 
     def training_curve(self):
 

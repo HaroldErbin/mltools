@@ -151,11 +151,32 @@ class Logger:
 
         return os.path.join(path, prefix + name + suffix + ext)
 
+    @staticmethod
+    def format_time(t):
+        """
+        Convert time in second to string.
+
+        Args:
+            t (float): time in second
+
+        Returns:
+            time formatted in string
+
+        """
+
+        if t < 60:
+            text = f"{t:.3f} s"
+        elif t < 3600:
+            text = f"{t//60:2.0f} m {t%60:2.0f} s"
+        else:
+            text = f"{t//3600:.0f} h {t//60:2.0f} m {t%60:2.0f} s"
+
+        return text
+
     def logtime_text(self, fmt=None):
         fmt = fmt or self.styles["print:datetime"]
 
-        return time.strftime(fmt,
-                             time.strptime(self.logtime, self.logtime_fmt))
+        return time.strftime(fmt, time.strptime(self.logtime, self.logtime_fmt))
 
     def expandpath(self, filename="", logtime=False):
         """
