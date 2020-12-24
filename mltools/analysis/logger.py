@@ -11,6 +11,7 @@ import time
 import csv
 import json
 
+import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
@@ -402,3 +403,21 @@ class Logger:
         """
 
         return min(int(len(data) / 25), 75)
+
+    @staticmethod
+    def log_std(y, y_std):
+        """
+        Compute normalized standard deviations for log plot.
+
+        When plotting in log scale, standard deviations are asymmetric and can cover large parts
+        of the figure below the curve. To avoid this problem, it is better to display relative
+        standard deviations.
+        This is not completely satisfying because the relative standard deviation is the standard
+        deviation of the log transform, but this is not true when showing only the y variable in
+        log scale. However, this improves a lot the graphics.
+
+        Reference:
+        - https://faculty.washington.edu/stuve/log_error.pdf
+        """
+
+        return np.log10(np.e) * y_std / np.abs(y)
