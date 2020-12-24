@@ -99,6 +99,8 @@ class DataStructure:
         3. the values in `shapes`
         In case 1., the biggest shape appearing in a column will be used.
 
+        The class behaves like an iterator for the list `features`.
+
         :param features: sequence of features or dict of features with datatype
         :type features: list(str), dict(str, str|tuple)
         :param with_channels: sequence of features with channels
@@ -157,6 +159,10 @@ class DataStructure:
 
     def __contains__(self, key):
         return key in self.features
+
+    def __iter__(self):
+        for f in self.features:
+            yield f
 
     def _extract_features_types_shapes(self, features, datatypes, infer,
                                        infer_cols):
