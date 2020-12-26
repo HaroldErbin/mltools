@@ -25,7 +25,7 @@ from tensorflow.keras.callbacks import (EarlyStopping, ModelCheckpoint,
 from .model import Model
 
 from mltools.data.structure import DataStructure
-from mltools.data.datatools import affix_keys
+import mltools.data.datatools as dt
 from mltools.analysis.logger import Logger
 
 
@@ -172,7 +172,7 @@ class NeuralNet(Model):
         # train Keras model which returns history
         if self.n_models > 1:
             train_time = []
-            losses = []
+            metrics = []
 
             for i, m in enumerate(self.model):
                 if verbose > 0:
@@ -182,7 +182,7 @@ class NeuralNet(Model):
 
                 history = m.fit(X, y, validation_data=val_data, callbacks=callbacks, **params)
 
-                losses.append(history.history)
+                metrics.append(history.history)
                 train_time.append(time.monotonic() - begin_train)
 
             if early_stopping is not None:
@@ -199,7 +199,7 @@ class NeuralNet(Model):
 
             train_time = time.monotonic() - begin_train
 
-            losses = history.history
+            metrics = history.history
 
             if early_stopping is not None:
                 try:
@@ -208,7 +208,7 @@ class NeuralNet(Model):
                 except OSError:
                     pass
 
-        history = self.update_train_history(losses, train_time, preprocess_time)
+        history = self._update_history(metrics, train_time, preprocess_time)
 
         return history
 
@@ -286,11 +286,11 @@ class NeuralNet(Model):
             # prefix names if necessary
             if features == self.inputs:
                 data = {k: v for k, v
-                        in affix_keys(data, suffix="_input").items()
+                        in dt.affix_keys(data, suffix="_input").items()
                         if k in model.input_names}
             if features == self.outputs:
                 data = {k: v for k, v
-                        in affix_keys(data, suffix="_output").items()
+                        in dt.affix_keys(data, suffix="_output").items()
                         if k in model.output_names}
 
             # TODO: take into account multiple auxiliary inputs/outputs
@@ -321,6 +321,68 @@ class NeuralNet(Model):
             #     data = {model.output_names[0]: data}
 
             return {k.rstrip('_output'): v for k, v in data.items()}
+
+    def _update_metric_history(self, metrics=None):
+        """
+        Update metric history during training.
+
+        When training a bag of neural networks, the number of epochs can be different if using
+        early stopping. To fix this issue, each loss array is padded with its last value until they
+        all have the same length.
+        """
+
+        metrics = metrics.copy()
+
+        nonmetric = {}
+        history = {}
+
+        # for a single metric (= self.loss), the history returned from training is a list
+        # convert to dict
+        if isinstance(metrics, list) and self.n_models == 1:
+            metrics = {"loss": np.array(metrics)}
+
+        if self.n_models > 1:
+
+            if isinstance(metrics[0], list):
+                # convert history lists to dict
+                metrics = [{"loss": m} for m in metrics]
+
+            metrics = dt.exchange_list_dict(metrics)
+
+            # losses can be of different lengths (e.g. due to early stopping)
+            # to solve this problem, we pad with the last data of each array
+            for metric, hist in metrics.items():
+                # compute length of longest history to be used for padding
+                epochs = np.reshape([len(h) for h in hist], (1, -1))
+                max_length = np.max(epochs)
+
+                # padding function: trivial when all histories have the same length
+                pad_data = lambda x: np.pad(x, (0, max_length - len(x)), constant_values=x[-1])
+
+                # TODO: check if transpose is optimal
+                history[metric] = np.c_[tuple(pad_data(h) for h in hist)].T
+        else:
+            epochs = np.array(len(metrics["loss"]))
+            history.update({k: np.array(v) for k, v in metrics.items()})
+
+        # update metric names (not needed)
+        # history = dict(zip(self.metrics, history.values()))
+
+        nonmetric["epochs"] = epochs
+
+        if "lr" in history:
+            nonmetric["lr"] = history.pop("lr")
+
+        if len(self.metric_history) == 0:
+            # if no training has happened yet, use directly current history
+            self.metric_history.update(history)
+        else:
+            # if training has already happened, merge history with previous
+            # history from previous runs
+            for key, val in history.items():
+                self.metric_history[key] = np.r_[self.metric_history[key], val]
+
+        return history, nonmetric
 
 
 def deep_model():

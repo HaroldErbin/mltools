@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import seaborn as sns
 
 from mltools.data import datatools as dt
@@ -551,70 +552,90 @@ def importance_text(importances):
     return text
 
 
-def training_curve(history, history_err=None, metric=None, log=True,
+def training_curve(history, history_std=None, metric=None, sigma=1, log=True,
                    marker=None, filename="", logtime=False, logger=None):
     """
     Plot evolution of metrics during training.
 
+    This can also be used to plot any quantity which changes during training (such as learning
+    rate).
+
     `history` can be:
-    - 1d array: metric values which name is given by `metric`
-    - dict: set of metric values, with name given by the key, filtered
-            using `metric`
-    For arrays, the metric name is set by the `metric` argument, which takes
-    the default value `loss` in this case. For a dict, `metric` can be a
-    string or a list of names (if `None`, all keys are used).
-    Standard deviations are given either by the argument `history_err` of
-    the same format as `history`, or by keys ending with `_std` if `history`
-    is a dict.
+    - 1d array: metric values which name is given by the argument `metric`
+    - dict: set of metric values, with name given by the key, filtered using `metric`
+
+    For an array, `metric` is used only for the legend and the default value is `loss`.
+    For a dict, `metric` can be a string or a list of names (if `None`, all keys are used).
+
+    When `history` is a dict, it can also contains values for validation set.
+
+    (Standard deviations are given either by the argument `history_std` of the same format as
+    `history`, by keys ending with `_std` if `history` is a dict).
     """
 
-    # TODO: improve and make more generic
+    logger = logger or Logger(logtime="filename")
+    styles = logger.styles
 
-    history = history or self.model.history
+    if metric is None:
+        if isinstance(history, dict):
+            metric = list(history.keys())
+        else:
+            metric = "loss"
 
-    if history is None or len(history) == 0:
-        return
+    # if several metrics are given, call this function for each of them individually
+    if isinstance(metric, list):
+        if not isinstance(history, dict):
+            raise TypeError("`metric` can be a list only if `history` is a dict, "
+                            f"found {type(history)}.")
+
+        # filter keys for validation information
+        metric = [m for m in metric if not m.startswith("val_")]
+
+        figs = {m: training_curve(history, history_std, m, sigma, log, marker, logger=logger)
+                for m in metric}
+
+        if filename != "":
+            logger.save_figs(figs.values(), filename=filename, logtime=logtime)
+
+        return figs
 
     if isinstance(history, dict):
-        val_history_std = history.get("val_%s_std" % metric, None)
-        val_history = history.get("val_" + metric, None)
-        history_std = history.get(metric + "_std", None)
-        history = history[metric]
+        hist = history.get(metric, None)
+        val_hist = history.get(f"val_{metric}", None)
     else:
-        val_history = None
-        val_history_std = None
-        history_std = None
+        hist = history
+        val_hist = None
+
+    if hist is None or len(hist) == 0:
+        return
+
+    # if isinstance(history_std, dict):
+    #     hist_std = history_std.get(metric, None)
+    #     val_hist_std = history_std.get(f"val_{metric}", None)
+    # else:
+    #     if isinstance(history, dict):
+    #         hist_std = history.get(f"{metric}_std", None)
+    #         val_hist_std = history.get(f"val_{metric}_std", None)
+    #     else:
+    #         val_hist_std = None
+    #         hist_std = None
 
     fig, ax = plt.subplots()
 
-    logger = self.logger or Logger
-    styles = logger.styles
+    steps = np.arange(1, len(hist.T) + 1, dtype=int)
 
-    steps = np.arange(1, len(history)+1, dtype=int)
+    label = "" if metric == "lr" else styles["label:train"]
 
-    ax.plot(steps, history[:], linestyle='solid', marker=marker,
-            color=styles["color:train"], label=styles["label:train"])
+    lineplot(steps, hist, color=styles["color:train"], label=label, ax=ax)
 
-    if history_std is not None:
-        ax.fill_between(steps, history - history_std,
-                        history + history_std,
-                        alpha=0.3, color=styles["color:train"])
+    if val_hist is not None:
+        lineplot(steps, val_hist, color=styles["color:val"], label=styles["label:val"],
+                 marker=marker, ax=ax)
 
-    if val_history is not None:
-        ax.plot(steps, val_history, linestyle='solid', marker=marker,
-                color=styles["color:val"], label=styles["label:val"])
-
-        if val_history_std is not None:
-            ax.fill_between(steps, val_history - val_history_std,
-                            val_history + val_history_std,
-                            alpha=0.3, color=styles["color:val"])
-
-    # TODO: plot position of best model if early stopping
-    #       it is located at total_step - wait_step
+    if len(ax.get_legend_handles_labels()[0]) > 0:
+        ax.legend()
 
     ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(integer=True))
-
-    ax.legend()
 
     ax.set_xlabel('epochs')
     ax.set_ylabel(metric)
@@ -622,7 +643,85 @@ def training_curve(history, history_err=None, metric=None, log=True,
     if log is True:
         ax.set_yscale('log')
 
-    if self.logger is not None:
-        self.logger.save_fig(fig, filename=filename, logtime=logtime)
+    if filename != "":
+        logger.save_fig(fig, filename=filename, logtime=logtime)
 
     return fig
+
+
+def lineplot(x, y, y_std=None, sigma=None, ci=None, color=None, label=None, marker=None,
+             alpha=0.3, ax=None):
+    """
+    Display line plot.
+
+    If `y_std` is given or if `y` is a 2d array, standard deviation or confidence interval is
+    displayed on the plot. There are two exclusive cases:
+    - the shaded area is given by `sigma` standard deviation
+    - the shaded area is given by the size `ci` of the confidence interval
+    By default, one standard deviation is shown.
+
+    Note: cannot use `sns.lineplot` because it works only with dataframe.
+    """
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    if sigma is not None and ci is not None:
+        raise ValueError("Cannot display both confidence interval and standard deviation.")
+
+    if sigma is None and ci is None:
+        sigma = 1
+
+    if ci is not None:
+        raise NotImplementedError("Plotting of confidence interval is not implemented.")
+
+    if len(np.shape(y)) > 2:
+        raise ValueError("`y` must be at most a 2d array.")
+
+        y_mean = np.mean(y)
+        y_std = np.std(y)
+
+    if len(np.shape(y)) == 2:
+        if y_std is not None:
+            raise ValueError("`y` must be 1d if `y_std` is given.")
+
+        y_mean = np.mean(y, axis=0)
+        y_std = np.std(y, axis=0)
+    else:
+        y_mean = y
+
+    if y_std is not None:
+        if sigma is not None:
+            dev_label = f"±{sigma}σ"
+            interval = (y_mean - sigma * y_std, y_mean + sigma * y_std)
+        if ci is not None:
+            dev_label += f"{ci}% CI"
+            interval = ()
+
+        label = dev_label if label == "" else label + f" ({dev_label})"
+
+        ax.fill_between(x, *interval, color=color, alpha=alpha)
+
+        # TODO: add shaded area in legend
+
+    ax.plot(x, y_mean, color=color, marker=marker, label=label)
+
+    return ax
+
+
+def log_std(y, y_std):
+    """
+    Compute normalized standard deviations for log plot.
+
+    When plotting in log scale, standard deviations are asymmetric and can cover large parts
+    of the figure below the curve. To avoid this problem, it is better to display relative
+    standard deviations.
+    This is not completely satisfying because the relative standard deviation is the standard
+    deviation of the log transform, but this is not true when showing only the y variable in
+    log scale. However, this improves a lot the graphics.
+
+    Reference:
+    - https://faculty.washington.edu/stuve/log_error.pdf
+    """
+
+    return np.log10(np.e) * y_std / np.abs(y)

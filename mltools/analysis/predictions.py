@@ -467,94 +467,6 @@ class Predictions:
                    .plot_feature_errors(sigma, signed_errors, density, bins,
                                         log, filename, logtime, **kwargs)
 
-    def training_curve(self, metric='loss', history=None, history_std=None,
-                       log=True, marker=None, filename="", logtime=False):
-        """
-        Loss evolution during training.
-
-        If the training is performed over an ensemble, history can be of
-        different lengths in case of early stopping. In that case, it is
-        necessary to pad each history such that they have the same length.
-        We choose to pad with the last value (which may not correspond to
-        the best model).
-        """
-
-        # TODO: improve and make more generic
-
-        # TODO: in Model, add as private attribute
-        non_metric_keys = {"epochs", "train_time", "preprocess_time", "lr"}
-
-        if history is None:
-            history = self.model.history.copy()
-
-            if self.model.n_models > 1:
-                history, history_std = datatools.average(history)
-
-        if history is None or len(set(history.keys()) - non_metric_keys) == 0:
-            return
-
-        if isinstance(history, dict):
-            val_history = history.get(f"val_{metric}", None)
-            history = history[metric]
-        else:
-            val_history = None
-
-        if isinstance(history_std, dict):
-            val_history_std = history_std.get(f"val_{metric}", None)
-            history_std = history_std.get(metric, None)
-        else:
-            val_history_std = None
-            history_std = None
-
-        if log is True and history_std is not None:
-            # error bar in log scale is given by rescaled relative error
-            # TODO: create function to compute it
-            history_std *= np.log10(np.e) / history
-            if val_history_std is not None:
-                val_history_std *= np.log10(np.e) / val_history
-
-        fig, ax = plt.subplots()
-
-        logger = self.logger or Logger
-        styles = logger.styles
-
-        steps = np.arange(1, len(history) + 1, dtype=int)
-
-        ax.plot(steps, history[:], linestyle='solid', marker=marker,
-                color=styles["color:train"], label=styles["label:train"])
-
-        if history_std is not None:
-            ax.fill_between(steps, history - history_std,
-                            history + history_std,
-                            alpha=0.3, color=styles["color:train"])
-
-        if val_history is not None:
-            ax.plot(steps, val_history, linestyle='solid', marker=marker,
-                    color=styles["color:val"], label=styles["label:val"])
-
-            if val_history_std is not None:
-                ax.fill_between(steps, val_history - val_history_std,
-                                val_history + val_history_std,
-                                alpha=0.3, color=styles["color:val"])
-
-        # TODO: plot position of best model if early stopping
-        #       it is located at total_step - wait_step
-
-        ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(integer=True))
-
-        ax.legend()
-
-        ax.set_xlabel('epochs')
-        ax.set_ylabel(metric)
-
-        if log is True:
-            ax.set_yscale('log')
-
-        if self.logger is not None:
-            self.logger.save_fig(fig, filename=filename, logtime=logtime)
-
-        return fig
-
     def summary_feature(self, feature, mode="", metrics=None, sigma=1,
                         signed_errors=True, density=True, bins=None,
                         log=False, filename="", logtime=True, **kwargs):
@@ -655,15 +567,11 @@ class Predictions:
 
         # training curves
         # TODO: by default, plot curves for all model metrics
-        if training_metrics is None:
-            training_metrics = self.model.metrics
-        else:
-            if isinstance(training_metrics, str):
-                training_metrics = [training_metrics]
+        if isinstance(training_metrics, str):
+            training_metrics = [training_metrics]
 
-        training_figs = [self.training_curve(log=True, metric=metric)
-                         for metric in training_metrics]
-        figs += [fig for fig in training_figs if fig is not None]
+        training_figs = self.model.training_curve(log=True, metric=training_metrics)
+        figs += [fig for fig in training_figs.values() if fig is not None]
 
         # page on model information
         model_text = self.model.summary(filename=model_filename,

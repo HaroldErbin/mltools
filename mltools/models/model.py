@@ -10,6 +10,7 @@ import numpy as np
 from sklearn.pipeline import Pipeline
 
 from mltools.data import datatools as dt
+from mltools.analysis import describe as descr
 from mltools.data.structure import DataStructure
 from mltools.analysis.logger import Logger
 
@@ -44,6 +45,8 @@ class Model:
     can be handled in the `DataStructure` class, but more complex average
     must be done through the model.
     """
+
+    _per_run_keys = ["epochs", "train_time", "preprocess_time"]
 
     def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
                  method=None, name=""):
@@ -81,8 +84,10 @@ class Model:
         # keep all train parameters used (updated only by some models)
         self.train_params_history = []
 
-        # training history (updated only by some models)
+        # training history: training times, etc.
         self.history = {}
+        # training history: metrics for each epoch (neural network)
+        self.metric_history = {}
 
         # method used (in general classification or regression)
         # defined only for some models
@@ -215,7 +220,7 @@ class Model:
 
             train_time = time.monotonic() - begin_train
 
-        history = self.update_train_history(train_time=train_time, preprocess_time=preprocess_time)
+        history = self._update_history(train_time=train_time, preprocess_time=preprocess_time)
 
         return history
 
@@ -251,21 +256,35 @@ class Model:
 
             return y
 
-    def update_train_history(self, losses=None, train_time=None, preprocess_time=None):
+    def _update_metric_history(self, metrics=None):
+        """
+        Update metric history during training.
+
+        Sometimes, the `metrics` argument may contain information unrelated to the metrics (for
+        example, for a Keras neural network) or need additional processing. This can be done here.
+        It must returns two `dict`: one containing the metrics, another containing information
+        unrelated to the metrics.
+        """
+
+        nonmetric = {}
+
+        return metrics.copy(), nonmetric
+
+    def _update_history(self, metrics=None, train_time=None, preprocess_time=None):
         """
         Update training history.
 
-        History is updated after each training. Values are simply concatenated
-        to each other, without distinguishing between the different trainings.
-        The number of epochs is also stored.
+        History is updated after each training. Values are simply concatenated to each other,
+        without distinguishing between the different trainings.
 
-        When training a bag of neural networks, the number of epochs can be different if using
-        early stopping. To fix this issue, each loss array is padded with its last value until they
-        all have the same length.
+        Information which can be stored:
+        - number of epochs (neural network)
+        - preprocessing time (all): time needed to convert the data before training the algorithm
+        - training time (all): time needed to train the algorithm
+        - metrics (neural network): metrics evaluated at each epoch for both the train and
+            validation sets
+        - learning rate (neural network): learning rate at each epoch
         """
-
-        # TODO: keep loss (information on regularization)
-        # TODO: keep all metrics, filter when plotting
 
         history = {}
 
@@ -277,47 +296,18 @@ class Model:
         if preprocess_time is not None:
             history['preprocess_time'] = np.array(preprocess_time)
             if self.n_models > 1:
+                # needed to ensure consistent computation of average
                 history['preprocess_time'] = history['preprocess_time'].reshape(1, -1)
 
-        if losses is not None:
-            losses = losses.copy()
-
-            # if there is a single metric (= loss), the history returned from training is a list
-            # convert to dict
-            if isinstance(losses, list) and self.n_models == 1:
-                losses = {"loss": np.array(losses)}
-
-            if self.n_models > 1:
-
-                if isinstance(losses[0], list):
-                    # convert history lists to dict
-                    losses = [{'loss': loss} for loss in losses]
-
-                losses = dt.exchange_list_dict(losses)
-
-                # losses can be of different lengths (e.g. due to early stopping)
-                # to solve this problem, we pad with the last data of each array
-                for metric, hist in losses.items():
-                    # compute length of longest history to be used for padding
-                    epochs = np.reshape([len(h) for h in hist], (1, -1))
-
-                    max_length = np.max(epochs)
-
-                    # padding function: note that it is trivial when all histories
-                    # have the same length
-                    pad_data = lambda x: np.pad(x, (0, max_length - len(x)),
-                                                constant_values=x[-1])
-
-                    # TODO: check if transpose is optimal
-                    history[metric] = np.c_[tuple(pad_data(h) for h in hist)].T
-            else:
-                epochs = np.array(len(losses["loss"]))
-                history.update({k: np.array(v) for k, v in losses.items()})
-
-            # update metric names (not needed)
-            # history = dict(zip(self.metrics, history.values()))
-
-            history['epochs'] = epochs
+        if metrics is not None:
+            # process `metrics` parameter in dedicated method: when training from Keras,
+            # `metrics` is obtained from `history.history` which contains non-metric information
+            #  (e.g. learning rate)
+            # moreover, we want to save the number of epochs of each training period
+            metric_history, nonmetric_history = self._update_metric_history(metrics=metrics)
+            history.update(nonmetric_history)
+        else:
+            metric_history = None
 
         if len(self.history) == 0:
             # if no training has happened yet, use directly current history
@@ -327,6 +317,9 @@ class Model:
             # history from previous runs
             for key, val in history.items():
                 self.history[key] = np.r_[self.history[key], val]
+
+        if metric_history is not None:
+            history["metrics"] = metric_history
 
         return history
 
@@ -395,21 +388,37 @@ class Model:
 
         return train_params
 
-    def get_train_history(self, average=True, filename="", logtime=False, logger=None):
+    def get_history(self, average=True, filename="", logtime=False, logger=None):
+        """
+        Return train history.
+
+        This includes also the metric history (per epoch).
+        """
 
         hist_std = {}
 
         if self.n_models > 1 and average is True:
             hist, hist_std = dt.average(self.history, axis=1)
             hist.update((k + "_std", v) for k, v in hist_std.items())
+
+            if len(self.metric_history) > 0:
+                metric_hist, metric_hist_std = dt.average(self.metric_history, axis=1)
+                hist["metrics"] = metric_hist
+                hist["metrics"].update((k + "_std", v) for k, v in metric_hist_std.items())
         else:
             hist = self.history.copy()
+
+            if len(self.metric_history) > 0:
+                hist["metrics"] = self.metric_history
 
         if filename != "" and len(hist) > 0:
             if logger is None:
                 logger = Logger(logtime="filename")
 
-            hist_json = {k: v.tolist() for k, v in hist.items()}
+            hist_json = {k: v.tolist() for k, v in hist.items() if k != "metrics"}
+            if "metrics" in hist:
+                hist_json["metrics"] = {k: v.tolist() for k, v in hist["metrics"].items()}
+
             logger.save_json(hist_json, filename=filename, logtime=logtime)
 
         return hist
@@ -480,9 +489,29 @@ class Model:
         else:
             return times
 
-    def training_curve(self):
+    def training_curve(self, metric=None, sigma=1, log=True, marker=None, filename="",
+                       logtime=False, logger=None):
+        """
+        Evolution of a metric during training.
 
-        pass
+        `metric` can be a single metric or a list of metrics. It can also be used to plot other
+        quantities which change during training (for example, learning rate).
+        """
+
+        # TODO: plot position of best model if early stopping
+        #       it is located at total_step - wait_step
+
+        if metric == "lr":
+            history = self.history.get("lr")
+        else:
+            history = self.metric_history.copy()
+            history["lr"] = self.history.get("lr")
+
+        # if self.n_models > 1:
+        #     history, history_std = dt.average(history, axis=0)
+
+        return descr.training_curve(history, None, metric, sigma, log, marker,
+                                    filename, logtime, logger)
 
     def summary(self, save_model_params=True, save_train_params=True,
                 save_history=True, save_io=True,
@@ -490,8 +519,7 @@ class Model:
 
         # TODO: save weights
 
-        if logger is None:
-            logger = Logger(logtime="filename")
+        logger = logger or Logger(logtime="filename")
 
         text = ""
         params = {}
@@ -544,15 +572,13 @@ class Model:
             fname = filename + "_history.json"
         else:
             fname = ""
-        history = self.get_train_history(average=False, filename=fname, logtime=logtime,
-                                         logger=logger)
+        history = self.get_history(average=False, filename=fname, logtime=logtime, logger=logger)
 
         # display text and save
         if show is True:
             print(text)
 
         if len(params) > 0 and filename != "":
-            logger.save_json(params, filename=filename + "_params.json",
-                             logtime=logtime)
+            logger.save_json(params, filename=filename + "_params.json", logtime=logtime)
 
         return text
