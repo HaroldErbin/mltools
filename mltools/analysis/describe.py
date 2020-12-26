@@ -17,6 +17,84 @@ from mltools.data.structure import DataStructure
 from mltools.models.forest import RandomForest
 
 
+def lineplot(x, y, y_std=None, sigma=None, ci=None, color=None, label=None, marker=None,
+             alpha=0.3, ax=None):
+    """
+    Display line plot.
+
+    If `y_std` is given or if `y` is a 2d array, standard deviation or confidence interval is
+    displayed on the plot. There are two exclusive cases:
+    - the shaded area is given by `sigma` standard deviation
+    - the shaded area is given by the size `ci` of the confidence interval
+    By default, one standard deviation is shown.
+
+    Note: cannot use `sns.lineplot` because it works only with dataframe.
+    """
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    if sigma is not None and ci is not None:
+        raise ValueError("Cannot display both confidence interval and standard deviation.")
+
+    if sigma is None and ci is None:
+        sigma = 1
+
+    if ci is not None:
+        raise NotImplementedError("Plotting of confidence interval is not implemented.")
+
+    if len(np.shape(y)) > 2:
+        raise ValueError("`y` must be at most a 2d array.")
+
+        y_mean = np.mean(y)
+        y_std = np.std(y)
+
+    if len(np.shape(y)) == 2:
+        if y_std is not None:
+            raise ValueError("`y` must be 1d if `y_std` is given.")
+
+        y_mean = np.mean(y, axis=0)
+        y_std = np.std(y, axis=0)
+    else:
+        y_mean = y
+
+    if y_std is not None:
+        if sigma is not None:
+            dev_label = f"±{sigma}σ"
+            interval = (y_mean - sigma * y_std, y_mean + sigma * y_std)
+        if ci is not None:
+            dev_label += f"{ci}% CI"
+            interval = ()
+
+        label = dev_label if label == "" else label + f" ({dev_label})"
+
+        ax.fill_between(x, *interval, color=color, alpha=alpha)
+
+        # TODO: add shaded area in legend
+
+    ax.plot(x, y_mean, color=color, marker=marker, label=label)
+
+    return ax
+
+
+def log_std(y, y_std):
+    """
+    Compute normalized standard deviations for log plot.
+
+    When plotting in log scale, standard deviations are asymmetric and can cover large parts
+    of the figure below the curve. To avoid this problem, it is better to display relative
+    standard deviations.
+    This is not completely satisfying because the relative standard deviation is the standard
+    deviation of the log transform, but this is not true when showing only the y variable in
+    log scale. However, this improves a lot the graphics.
+
+    Reference:
+    - https://faculty.washington.edu/stuve/log_error.pdf
+    """
+
+    return np.log10(np.e) * y_std / np.abs(y)
+
+
 def distribution(x, x_true=None, x_err=None, sigma=2, plottype='step',
                  density=True, bins=None, range=None, log=False,
                  xlabel=None, label=None, filename="", logtime=False,
@@ -647,81 +725,3 @@ def training_curve(history, history_std=None, metric=None, sigma=1, log=True,
         logger.save_fig(fig, filename=filename, logtime=logtime)
 
     return fig
-
-
-def lineplot(x, y, y_std=None, sigma=None, ci=None, color=None, label=None, marker=None,
-             alpha=0.3, ax=None):
-    """
-    Display line plot.
-
-    If `y_std` is given or if `y` is a 2d array, standard deviation or confidence interval is
-    displayed on the plot. There are two exclusive cases:
-    - the shaded area is given by `sigma` standard deviation
-    - the shaded area is given by the size `ci` of the confidence interval
-    By default, one standard deviation is shown.
-
-    Note: cannot use `sns.lineplot` because it works only with dataframe.
-    """
-
-    if ax is None:
-        fig, ax = plt.subplots()
-
-    if sigma is not None and ci is not None:
-        raise ValueError("Cannot display both confidence interval and standard deviation.")
-
-    if sigma is None and ci is None:
-        sigma = 1
-
-    if ci is not None:
-        raise NotImplementedError("Plotting of confidence interval is not implemented.")
-
-    if len(np.shape(y)) > 2:
-        raise ValueError("`y` must be at most a 2d array.")
-
-        y_mean = np.mean(y)
-        y_std = np.std(y)
-
-    if len(np.shape(y)) == 2:
-        if y_std is not None:
-            raise ValueError("`y` must be 1d if `y_std` is given.")
-
-        y_mean = np.mean(y, axis=0)
-        y_std = np.std(y, axis=0)
-    else:
-        y_mean = y
-
-    if y_std is not None:
-        if sigma is not None:
-            dev_label = f"±{sigma}σ"
-            interval = (y_mean - sigma * y_std, y_mean + sigma * y_std)
-        if ci is not None:
-            dev_label += f"{ci}% CI"
-            interval = ()
-
-        label = dev_label if label == "" else label + f" ({dev_label})"
-
-        ax.fill_between(x, *interval, color=color, alpha=alpha)
-
-        # TODO: add shaded area in legend
-
-    ax.plot(x, y_mean, color=color, marker=marker, label=label)
-
-    return ax
-
-
-def log_std(y, y_std):
-    """
-    Compute normalized standard deviations for log plot.
-
-    When plotting in log scale, standard deviations are asymmetric and can cover large parts
-    of the figure below the curve. To avoid this problem, it is better to display relative
-    standard deviations.
-    This is not completely satisfying because the relative standard deviation is the standard
-    deviation of the log transform, but this is not true when showing only the y variable in
-    log scale. However, this improves a lot the graphics.
-
-    Reference:
-    - https://faculty.washington.edu/stuve/log_error.pdf
-    """
-
-    return np.log10(np.e) * y_std / np.abs(y)
