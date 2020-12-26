@@ -225,8 +225,18 @@ class Model:
         return history
 
     def predict(self, X, return_all=False, filtering=False):
+        """
+        Make predictions using model.
+
+        `X` is the input. It can be a dict consisting of several split (such as train and test),
+        in which case predictions are done for each split separately.
+        """
 
         # filtering → apply filter (for outliers), by default no
+
+        # TODO: more advanced checking, in particular, using self.inputs
+        if "train" in X:
+            return {k: self.predict(X[k], return_all, filtering) for k in X}
 
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
@@ -255,6 +265,13 @@ class Model:
                 y = self.outputs.inverse_transform(y)
 
             return y
+
+    def fit_predict(self, X, y=None, cv=False, train_params=None, return_all=False,
+                    filtering_fit=True, filtering_predict=False):
+
+        history = self.fit(X, y, cv, train_params, filtering_fit)
+
+        return self.predict(X, return_all, filtering_predict)
 
     def _update_metric_history(self, metrics=None):
         """
