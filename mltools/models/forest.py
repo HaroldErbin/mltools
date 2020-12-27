@@ -11,10 +11,10 @@ from .model import Model
 
 class RandomForest(Model):
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
                  method="reg", name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, n, method, name)
+        Model.__init__(self, inputs, outputs, model_params, model_fn, n, method, name)
 
         if n > 1:
             self.model = [self.create_model() for n in range(self.n)]

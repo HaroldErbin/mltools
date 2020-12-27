@@ -5,7 +5,7 @@ from .model import Model
 
 class LinearRegression(Model):
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
                  method="reg", name=""):
         """
         Linear regression.
@@ -18,7 +18,7 @@ class LinearRegression(Model):
 
         # TODO: add classification task
 
-        Model.__init__(self, inputs, outputs, model_params, n, method, name)
+        Model.__init__(self, inputs, outputs, model_params, model_fn, n, method, name)
 
         if n > 1:
             self.model = [self.create_model() for n in range(self.n)]

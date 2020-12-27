@@ -134,7 +134,7 @@ class Predictions:
                                  "`None` to extract the targets from `X`.")
         else:
             if self.outputs is not None:
-                self.y_true = self.outputs(self.y_true, mode='col')
+                self.y_true = self.outputs(y_true, mode='col')
             else:
                 self.y_true = y_true
 
@@ -387,6 +387,7 @@ class Predictions:
     def all_feature_all_metrics(self, mode=None, filename="", logtime=True):
 
         # TODO: add dataframe mode?
+        # TODO: option to keep all results when n > 1
 
         # TODO: don't compute if not needed (in text mode without filename)
         results = {f: self.feature_all_metrics(f) for f in self.features}

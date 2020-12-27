@@ -645,7 +645,7 @@ def array_to_dict(array, shapes):
     return {k: a for k, a in zip(shapes.keys(), array_list)}
 
 
-def average(ensemble, axis=0):
+def average(ensemble, axis=0, mergedict=False):
     """
     Define basic average.
     """
@@ -655,14 +655,17 @@ def average(ensemble, axis=0):
         mean = {f: np.mean(v, axis=axis) for f, v in ensemble.items()}
         std = {f: np.std(v, axis=axis) for f, v in ensemble.items()}
 
-        return mean, std
+        if mergedict is True:
+            return {**affix_keys(mean, suffix="_mean"), **affix_keys(std, suffix="_std")}
+        else:
+            return mean, std
 
     # if not, assume it is a list of dict or list
     types = set(map(type, ensemble))
 
     if len(types) > 1:
-        raise TypeError(f"Can average only on an ensemble containing a "
-                        "single type of predictions. FOund `{types}`.")
+        raise TypeError("Can average only on an ensemble containing a "
+                        f"single type of predictions. Found `{types}`.")
 
     datatype = types.pop()
 
@@ -675,3 +678,44 @@ def average(ensemble, axis=0):
         raise TypeError(f"Cannot average {datatype}.")
 
     return mean, std
+
+
+def update_dict_array(d1, d2):
+    """
+    Update a dict of arrays by concatenating values from another dict of arrays.
+
+    Both `d1` and `d2` are dict of arrays. The values of `d2` are concatenated to the existent
+    values in `d1` (row-wise).
+
+    Args:
+        d1 (dict(str, np.array)): dict to be updated.
+        d2 (dict(str, np.array)): dict containing the additional values.
+    """
+
+    d = d1.copy()
+
+    for k, v in d2.items():
+        if k in d:
+            if len(np.shape(v)) == 0:
+                d[k] = np.r_[d[k], v]
+            else:
+                d[k] = np.r_['0,2', d[k], v]
+        else:
+            d[k] = d2[k]
+
+    return d
+
+
+def array_to_json(data):
+    """
+    Convert arrays to list for saving in json.
+    """
+
+    if isinstance(data, dict):
+        return {k: array_to_json(v) for k, v in data.items()}
+    elif isinstance(data, (tuple, list)):
+        return [array_to_json(v) for v in data]
+    elif isinstance(data, np.ndarray):
+        return data.tolist()
+    else:
+        return data

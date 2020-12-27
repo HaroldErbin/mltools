@@ -388,6 +388,13 @@ class DataStructure:
 
         return datatools.average(ensemble)
 
+    def distance(self, x1, x2, metric=None):
+        """
+        Compute distance between two datasets using the appropriate metric.
+        """
+
+        raise NotImplementedError
+
     def summary(self, name="", filename="", logtime=False,
                 logger=None, show=False, mode='dict'):
         """

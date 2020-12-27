@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import seaborn as sns
 
+from mltools.data import datatools as dt
+
 
 # TODO: prevent display of graphs
 
@@ -63,8 +65,8 @@ class Logger:
 
     styles = STYLES
 
-    def __init__(self, path="", prefix="", suffix="", logtime="folder",
-                 logtime_fmt="%Y-%m-%d-%H%M%S"):
+    def __init__(self, path="", prefix="", suffix="", logtime="filename",
+                 logtime_fmt="%Y-%m-%d-%H%M%S", args=None):
         """
         Inits Logger
 
@@ -78,6 +80,7 @@ class Logger:
                 If none of these two cases is found, time is not logged.
                 Default to "folder".
             logtime_fmt (str): time format.
+            args (argparse.Namespace): command line arguments.
         """
 
         self.styles = STYLES.copy()
@@ -334,6 +337,7 @@ class Logger:
         if isinstance(data, pd.DataFrame):
             data.to_json(filename, indent=4)
         else:
+            data = dt.array_to_json(data)
             with open(filename, 'w') as f:
                 json.dump(data, f, indent=4)
 

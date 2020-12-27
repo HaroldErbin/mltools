@@ -19,13 +19,14 @@ import time
 import numpy as np
 
 from tensorflow import keras
-from tensorflow.keras.callbacks import (EarlyStopping, ModelCheckpoint,
-                                        ReduceLROnPlateau)
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 
 from .model import Model
 
 from mltools.data.structure import DataStructure
 import mltools.data.datatools as dt
+
+from mltools.analysis.metrics import MetricLookup
 from mltools.analysis.logger import Logger
 
 
@@ -38,12 +39,13 @@ class NeuralNetPredictor():
 
 class NeuralNet(Model):
 
-    def __init__(self, model_fn, inputs=None, outputs=None, model_params=None,
+    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None,
                  n=1, method=None, name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, n, method, name)
+        Model.__init__(self, inputs, outputs, model_params, model_fn, n, method, name)
 
-        self.model_fn = model_fn
+        if self.model_fn is None:
+            raise ValueError("`model_fn` must be provided for a neural network.")
 
         if n > 1:
             self.submodels = [self.create_model() for n in range(self.n)]
@@ -78,7 +80,7 @@ class NeuralNet(Model):
             else:
                 return self.submodels[model]
 
-    def fit(self, X, y=None, val_data=None, train_params=None):
+    def fit(self, X, y=None, val_data=None, train_params=None, filtering=True):
 
         # TODO: missing early stopping in summary
 
@@ -212,7 +214,7 @@ class NeuralNet(Model):
 
         return history
 
-    def predict(self, X, return_all=False):
+    def predict(self, X, return_all=False, filtering=False):
 
         # note: predict() resets model.history
 
@@ -226,6 +228,8 @@ class NeuralNet(Model):
 
             if return_all is True:
                 # return all predictions if explicitly requested
+
+                # TODO: put in a single array for each feature
                 return y
             else:
                 # average predictions

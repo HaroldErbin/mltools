@@ -56,7 +56,9 @@ class RatioSample:
             else:
                 ratios = dict(zip(('train', 'val', 'test'), ratios[:3]))
 
-        self.ratios = ratios
+        # to avoid bad float representation, round ratios
+        # filter out ratios set to zero
+        self.ratios = {k: np.around(r, 10) for k, r in ratios.items() if r != 0}
 
         sum_ratios = sum(self.ratios.values())
 
@@ -74,6 +76,9 @@ class RatioSample:
         The dataset is shuffled before extracting the subsets if `shuffle`
         is true.
 
+        Several datasets can be given as a list or tuple. They need to have the same indexing,
+        in which case each split contains the data for the same samples in the same order.
+
         :param dataset: data to split in subsets
         :type dataset: `pandas.DataFrame`, `numpy.array`, `dict`
         :param shuffle: shuffle the dataset before extracting subsets
@@ -89,22 +94,42 @@ class RatioSample:
         elif isinstance(dataset, (pd.DataFrame, np.ndarray)):
             # works only for array, dataframe
             size = len(dataset)
+        elif isinstance(dataset, (tuple, list)):
+            if len(set(map(len, dataset))) > 1:
+                raise ValueError("All datasets must have the same size.")
+
+            # several datasets given as a list or tuple
+            size = len(dataset[0])
         else:
-            raise TypeError("Dataset type `{}` is not supported"
-                            .format(type(dataset)))
+            raise TypeError(f"Dataset type `{type(dataset)}` is not supported.")
 
         idx_splits = self.make_samples(size, shuffle)
+
+        if isinstance(dataset, (tuple, list)):
+            value_splits = [self.split_dataset_from_idx(d, idx_splits) for d in dataset]
+            if isinstance(dataset, tuple):
+                value_splits = tuple(value_splits)
+        else:
+            value_splits = self.split_dataset_from_idx(dataset, idx_splits)
+
+        return value_splits
+
+    def split_dataset_from_idx(self, dataset, idx_splits):
+        """
+        Split a dataset given a list of indices.
+        """
+
         value_splits = {}
 
         for key, idx in idx_splits.items():
             if isinstance(dataset, dict):
                 value_splits[key] = {}
                 for col, val in dataset.items():
-                        value_splits[key][col] = val[idx, ...]
+                    value_splits[key][col] = val[idx, ...]
             elif isinstance(dataset, np.ndarray):
-                    value_splits[key] = dataset[idx, ...]
+                value_splits[key] = dataset[idx, ...]
             elif isinstance(dataset, pd.DataFrame):
-                    value_splits[key] = dataset.iloc[list(idx)]
+                value_splits[key] = dataset.iloc[list(idx)]
 
         return value_splits
 
@@ -130,7 +155,7 @@ class RatioSample:
         last = 0
 
         for key, ratio in self.ratios.items():
-            delta = round(ratio * size)
+            delta = int(np.rint(ratio * size))
             splits[key] = tuple(indices[last:last+delta])
             last += delta
 

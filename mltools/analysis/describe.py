@@ -18,7 +18,7 @@ from mltools.models.forest import RandomForest
 
 
 def lineplot(x, y, y_std=None, sigma=None, ci=None, color=None, label=None, marker=None,
-             alpha=0.3, ax=None):
+             linestyle='solid', alpha=0.3, ax=None):
     """
     Display line plot.
 
@@ -43,18 +43,20 @@ def lineplot(x, y, y_std=None, sigma=None, ci=None, color=None, label=None, mark
     if ci is not None:
         raise NotImplementedError("Plotting of confidence interval is not implemented.")
 
-    if len(np.shape(y)) > 2:
+    if np.ndim(y) > 2:
         raise ValueError("`y` must be at most a 2d array.")
 
-        y_mean = np.mean(y)
-        y_std = np.std(y)
-
-    if len(np.shape(y)) == 2:
+    if np.ndim(y) == 2:
         if y_std is not None:
             raise ValueError("`y` must be 1d if `y_std` is given.")
 
-        y_mean = np.mean(y, axis=0)
-        y_std = np.std(y, axis=0)
+        # find on which axis to make statistics depending on the respective length of x and y
+        if len(x) == len(y):
+            y_mean = np.mean(y, axis=1)
+            y_std = np.std(y, axis=1)
+        else:
+            y_mean = np.mean(y, axis=0)
+            y_std = np.std(y, axis=0)
     else:
         y_mean = y
 
@@ -72,7 +74,7 @@ def lineplot(x, y, y_std=None, sigma=None, ci=None, color=None, label=None, mark
 
         # TODO: add shaded area in legend
 
-    ax.plot(x, y_mean, color=color, marker=marker, label=label)
+    ax.plot(x, y_mean, color=color, marker=marker, linestyle=linestyle, label=label)
 
     return ax
 
@@ -725,3 +727,56 @@ def training_curve(history, history_std=None, metric=None, sigma=1, log=True,
         logger.save_fig(fig, filename=filename, logtime=logtime)
 
     return fig
+
+
+def learning_curve_plot(scores, metrics=None, filename=None, logtime=None, logger=None):
+
+    # TODO: option to put several features on the same graph (for example, when the metric is
+    #   bounded like accuracy)cl
+
+    logger = logger or Logger()
+    styles = logger.styles
+
+    scores = scores.copy()
+    ratios = scores.pop('ratios')
+
+    figs = []
+
+    for f in scores:
+        scores_train = scores[f]['train']
+        scores_test = scores[f]['test']
+
+        for metric in scores_train:
+            if metric.endswith("_mean") or metric.endswith("_std"):
+                continue
+
+            y_train = scores_train[metric]
+            y_test = scores_test[metric]
+
+            fig, ax = plt.subplots()
+
+            # label = "{} ({}.)".format(k, styles["label:val"][:3]
+
+            lineplot(ratios, y_train, color=styles["color:train"], label=styles["label:train"],
+                     marker='.', ax=ax)
+
+            lineplot(ratios, y_test, color=styles["color:val"], label=styles["label:val"],
+                     marker='.', ax=ax)
+
+            ax.legend()
+
+            ax.set_xlabel("training ratio")
+            ax.set_ylabel(metric)
+
+            # ax.set_ylim(ymin=0, ymax=1)
+
+            ax.xaxis.set_major_locator(mpl.ticker.FixedLocator(ratios))
+
+            figs.append(fig)
+
+            plt.close(fig)
+
+    if filename is not None:
+        logger.save_figs(figs, filename=filename, logtime=logtime)
+
+    return figs

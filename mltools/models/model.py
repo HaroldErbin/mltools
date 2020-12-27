@@ -10,9 +10,13 @@ import numpy as np
 from sklearn.pipeline import Pipeline
 
 from mltools.data import datatools as dt
-from mltools.analysis import describe as descr
+from mltools.data.sample import RatioSample
 from mltools.data.structure import DataStructure
+
+from mltools.analysis import describe as descr
+from mltools.analysis.metrics import MetricLookup
 from mltools.analysis.logger import Logger
+from mltools.analysis.predictions import Predictions
 
 
 # TODO: method `evaluate`, `score` with metric (or list of metrics) as argument
@@ -48,7 +52,7 @@ class Model:
 
     _per_run_keys = ["epochs", "train_time", "preprocess_time"]
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
                  method=None, name=""):
         """
         :param inputs: how input data to the various function should be
@@ -97,6 +101,8 @@ class Model:
             self.model_params = {}
         else:
             self.model_params = model_params
+
+        self.model_fn = model_fn
 
         # define loss and metrics name by looking in model parameters
         # if no loss is given, use 'loss' for the loss function
@@ -224,7 +230,7 @@ class Model:
 
         return history
 
-    def predict(self, X, return_all=False, filtering=False):
+    def predict(self, X, return_all=False):
         """
         Make predictions using model.
 
@@ -234,14 +240,14 @@ class Model:
 
         # filtering → apply filter (for outliers), by default no
 
-        # TODO: more advanced checking, in particular, using self.inputs
+        # TODO: better checking, in particular, using self.inputs
         if "train" in X:
-            return {k: self.predict(X[k], return_all, filtering) for k in X}
+            return {k: self.predict(X[k], return_all) for k in X}
 
         if self.inputs is not None:
             X = self.inputs(X, mode='flat')
 
-        # test if the model define an ensemble
+        # test if the model defines an ensemble
         if self.n_models > 1:
             y = [m.predict(X) for m in self.model]
 
@@ -267,11 +273,31 @@ class Model:
             return y
 
     def fit_predict(self, X, y=None, cv=False, train_params=None, return_all=False,
-                    filtering_fit=True, filtering_predict=False):
+                    filtering=True):
 
-        history = self.fit(X, y, cv, train_params, filtering_fit)
+        history = self.fit(X, y, cv, train_params, filtering)
 
-        return self.predict(X, return_all, filtering_predict)
+        return self.predict(X, return_all)
+
+    def evaluate(self, X, y=None, metric=None, return_all=True):
+
+        # TODO: loop over train, test...
+
+        if y is None:
+            y = X
+
+        if self.outputs is not None:
+            y = self.outputs(y, mode='col')
+
+        pred = self.predict(X, return_all=True)
+
+        if self.n_models > 1:
+            # TODO: this assumes that y is a dict, which may not be true
+            pred = {f: np.array([p[f] for p in pred]) for f in self.outputs}
+
+        # TODO: statistics if return_all is False
+
+        return MetricLookup.evaluate(y, pred, metric=None, n=self.n_models)
 
     def _update_metric_history(self, metrics=None):
         """
@@ -353,6 +379,10 @@ class Model:
         # useful for creating several models (for bagging, cross-validation...)
 
         raise NotImplementedError("Trying to call abstract `Model` class.")
+
+    def copy_model(self):
+        return self.__class__(self.inputs, self.outputs, self.model_params, self.model_fn,
+                              n=self.n_models, method=self.method, name=self.name)
 
     def save_model(self, file):
         # save weights
@@ -530,13 +560,90 @@ class Model:
         return descr.training_curve(history, None, metric, sigma, log, marker,
                                     filename, logtime, logger)
 
+    def learning_curve(self, X, y=None, train_params=None, ratios=None, val_ratio=0., metric=None,
+                       filtering=True, filename="", logtime=False, logger=None):
+        """
+        Compute learning curve.
+
+        The ratios are given for the training set. `val_ratio` can be set to specify which size
+        of the latter is kept for validation. However, evaluation is performed for train and
+        validation together.
+        """
+
+        logger = logger or Logger()
+
+        if train_params is None:
+            train_params = {}
+
+        verbose = train_params.get("verbose", 0)
+
+        if ratios is None:
+            ratios = np.arange(0.1, 1.0, 0.1)
+
+        # store results at each ratio
+        scores = {f: {"train": {}, "test": {}} for f in self.outputs}
+        scores["ratios"] = ratios
+
+        if "train" in X and "val" in X:
+            # if X is already split and contains both train and validation data, combine them
+            # TODO: merge sets
+            raise NotImplementedError("Cannot deal with training data split in train and "
+                                      "validation sets.")
+        elif "train" in X:
+            X = X['train']
+
+        if y is None:
+            y = X
+
+        for x in ratios:
+            x = np.round(x, 10)
+
+            if verbose > 0:
+                print(f"\n# Training ratio: {x}\n")
+
+            sampling = RatioSample({"trainval": x, "test": 1 - x})
+
+            X_eval, y_eval = sampling([X, y], shuffle=True)
+
+            if val_ratio > 0:
+                trainval_sampling = RatioSample({"train": 1 - val_ratio, "val": val_ratio})
+                X_train, y_train = trainval_sampling([X_eval["trainval"], y_eval["trainval"]])
+            else:
+                X_train, y_train = X_eval["trainval"], y_eval["trainval"]
+
+            model = self.copy_model()
+
+            model.fit(X_train, y_train, train_params=train_params, filtering=filtering)
+
+            scores_train = self.evaluate(X_eval["trainval"], y_eval["trainval"], metric=metric)
+            scores_test = self.evaluate(X_eval["test"], y_eval["test"], metric=metric)
+
+            for f in self.outputs:
+                scores[f]["train"] = dt.update_dict_array(scores[f]["train"], scores_train[f])
+                scores[f]["test"] = dt.update_dict_array(scores[f]["test"], scores_test[f])
+
+        if self.n_models > 1:
+            for f in self.outputs:
+                scores[f]["train"].update(dt.average(scores[f]["train"], axis=1, mergedict=True))
+                scores[f]["test"].update(dt.average(scores[f]["test"], axis=1, mergedict=True))
+
+        if filename != "":
+            logger.save_json(scores, filename=filename + '.json', logtime=logtime)
+            pdfname = filename + '.pdf'
+        else:
+            pdfname = ""
+
+        fig = descr.learning_curve_plot(scores, metric, pdfname, logtime, logger)
+
+        return scores, fig
+
     def summary(self, save_model_params=True, save_train_params=True,
                 save_history=True, save_io=True,
                 filename="", logtime=False, logger=None, show=False):
 
         # TODO: save weights
 
-        logger = logger or Logger(logtime="filename")
+        logger = logger or Logger()
 
         text = ""
         params = {}

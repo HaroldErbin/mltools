@@ -5,47 +5,9 @@ Define the metrics used for the different feature types.
 import numpy as np
 import pandas as pd
 
-
-# TODO: define metric as class with: name, pretty_name, static method to
-#       compute the metric
-#       can define several names
-#       format name thanks to function according to arguments if any
-#       define as separate class or member of TensorEval?
-#       first option may be better, but create one module per data type
-#       class TensorEval allows to call any class easily (make list of
-#       metrics, lookup by names)
-#       can initialize class to set default arguments (but can be used
-#       as static)
-
 # TODO: allow passing argument to TensorEval.evaluate
 #       to do this: `method` can be text, callable or pair
 #       (text/callable, kwargs)
-
-
-class Metric:
-
-    def __init__(self, value, name, pretty_name=None):
-        # TODO: add format (float, percentage...)
-
-        self.value = value
-        self.name = name
-
-        self.pretty_name = pretty_name or pretty_name
-
-    def __str__(self):
-
-        pass
-
-    def __float__(self):
-
-        pass
-
-
-def rmse(y_true, y_pred):
-    val = None
-
-    return Metric(val, "rmse", "RMSE")
-
 
 
 class TensorEval:

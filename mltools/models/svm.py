@@ -8,10 +8,10 @@ from .model import Model
 
 class SVM(Model):
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, n=1,
+    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
                  method="reg", name=""):
 
-        Model.__init__(self, inputs, outputs, model_params, n, method, name)
+        Model.__init__(self, inputs, outputs, model_params, model_fn, n, method, name)
 
         # default arguments
         if "kernel" not in self.model_params:
