@@ -17,6 +17,8 @@ directions.
 import numpy as np
 import pandas as pd
 
+import sklearn
+
 
 _LOW_TENSORS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
                 'tensor_2d': 'matrix'}
@@ -719,3 +721,41 @@ def array_to_json(data):
         return data.tolist()
     else:
         return data
+
+
+class ConstantScaler(sklearn.base.TransformerMixin):
+    """
+    Rescaling of all components of a vector by a constant number.
+
+    It behaves like a MinMaxScaler, but with fixed predefined range. Data in the range [min, max]
+    is mapped to the range [0, 1].
+
+    This can be used for a tensor but it must be flattened before (like for all scikit
+    transformer).
+
+    This can be useful when one knows that components have a fixed ranges with the minimal and
+    maximal values not appearing in the training data, especially in a tensor (usual scalers work
+    column-wise).
+    """
+
+    def __init__(self, feature_range=(0, 1)):
+        if isinstance(feature_range, (tuple, list)):
+            if len(feature_range) != 2:
+                raise ValueError("`feature_range` must be a 2-tuple.")
+
+            self.min_, self.max_ = feature_range
+
+        else:
+            self.min_ = 0
+            self.max_ = feature_range
+
+        self.scale_ = 1 / (self.max_ - self.min_)
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        return np.multiply(np.subtract(X, self.min_), self.scale_)
+
+    def inverse_transform(self, X):
+        return np.add(np.divide(X, self.scale_), self.min_)
