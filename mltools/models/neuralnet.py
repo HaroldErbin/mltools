@@ -80,7 +80,7 @@ class NeuralNet(Model):
             else:
                 return self.submodels[model]
 
-    def fit(self, X, y=None, val_data=None, train_params=None, filtering=True):
+    def fit(self, X, y=None, val_data=None, train_params=None, scaling=True):
 
         # TODO: missing early stopping in summary
 
@@ -156,12 +156,12 @@ class NeuralNet(Model):
         begin_preprocess = time.monotonic()
 
         # add tests in the function?
-        X = self.transform_data(X, self.inputs)
-        y = self.transform_data(y, self.outputs)
+        X = self.transform_data(X, self.inputs, scaling=scaling)
+        y = self.transform_data(y, self.outputs, scaling=scaling)
 
         if X_val is not None and y_val is not None:
-            X_val = self.transform_data(X_val, self.inputs)
-            y_val = self.transform_data(y_val, self.outputs)
+            X_val = self.transform_data(X_val, self.inputs, scaling=scaling)
+            y_val = self.transform_data(y_val, self.outputs, scaling=scaling)
 
             val_data = (X_val, y_val)
         else:
@@ -214,17 +214,14 @@ class NeuralNet(Model):
 
         return history
 
-    def predict(self, X, return_all=False, filtering=False):
+    def predict(self, X, scaling=True, return_all=False):
 
         # note: predict() resets model.history
 
         X = self.transform_data(X, self.inputs)
 
         if self.n_models > 1:
-            y = [self.transform_pred(m.predict(X)) for m in self.model]
-
-            if self.outputs is not None:
-                y = [self.outputs.inverse_transform(v) for v in y]
+            y = [self.transform_pred(m.predict(X), scaling=scaling) for m in self.model]
 
             if return_all is True:
                 # return all predictions if explicitly requested
@@ -239,14 +236,11 @@ class NeuralNet(Model):
                     # if no data structure is defined, try simple average
                     return Logger.average(y)
         else:
-            y = self.transform_pred(self.model.predict(X))
-
-            if self.outputs is not None:
-                y = self.outputs.inverse_transform(y)
+            y = self.transform_pred(self.model.predict(X), scaling=scaling)
 
             return y
 
-    def transform_data(self, data, features):
+    def transform_data(self, data, features, scaling=False):
         """
         Prepare data to feed to the network.
 
@@ -280,12 +274,12 @@ class NeuralNet(Model):
         if nn_type == keras.models.Sequential:
             if len(features) == 1:
                 # single feature -> return tensor data (preserving shape)
-                return list(features(data, mode="col").values())[0]
+                return list(features(data, mode="col", scaling=scaling).values())[0]
             else:
                 # multiple features -> return a matrix
-                return features(data, mode="flat")
+                return features(data, mode="flat", scaling=scaling)
         else:
-            data = features(data, mode="col", trivial_dim=True)
+            data = features(data, mode="col", scaling=scaling, trivial_dim=True)
 
             # prefix names if necessary
             if features == self.inputs:
@@ -302,7 +296,7 @@ class NeuralNet(Model):
 
             return data
 
-    def transform_pred(self, data):
+    def transform_pred(self, data, scaling=False):
 
         if self.n_models > 1:
             nn_type = set(map(type, self.model))
@@ -316,15 +310,18 @@ class NeuralNet(Model):
             nn_type = type(self.model)
             model = self.model
 
-        if nn_type == keras.models.Sequential:
-            return data
-        else:
+        if nn_type != keras.models.Sequential:
             if len(model.output_names) > 1:
                 data = dict(zip(model.output_names, data))
             # else:
             #     data = {model.output_names[0]: data}
 
-            return {k.rstrip('_output'): v for k, v in data.items()}
+            data = {k.rstrip('_output'): v for k, v in data.items()}
+
+        if self.outputs is not None:
+            return self.outputs.inverse_transform(data, scaling=scaling)
+        else:
+            return data
 
     def _update_metric_history(self, metrics=None):
         """

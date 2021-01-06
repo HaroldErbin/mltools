@@ -454,7 +454,7 @@ class DataStructure:
             raise NotImplementedError
 
     def inverse_transform_flat(self, y, scaling=False):
-        return self.inverse_transform_col(dt.array_to_dict(y, self.shapes))
+        return self.inverse_transform_col(dt.array_to_dict(y, self.shapes), scaling=scaling)
 
     def inverse_transform_col(self, y, scaling=False):
         dic = {}

@@ -167,7 +167,7 @@ class Model:
         else:
             return 1
 
-    def fit(self, X, y=None, cv=False, train_params=None, filtering=True):
+    def fit(self, X, y=None, cv=False, train_params=None, scaling=True):
         """
         Train a model.
 
@@ -195,9 +195,9 @@ class Model:
         begin_preprocess = time.monotonic()
 
         if self.inputs is not None:
-            X = self.inputs(X, mode='flat')
+            X = self.inputs(X, mode='flat', scaling=scaling)
         if self.outputs is not None:
-            y = self.outputs(y, mode='flat')
+            y = self.outputs(y, mode='flat', scaling=scaling)
 
         preprocess_time = time.monotonic() - begin_preprocess
 
@@ -230,7 +230,7 @@ class Model:
 
         return history
 
-    def predict(self, X, return_all=False):
+    def predict(self, X, scaling=True, return_all=False):
         """
         Make predictions using model.
 
@@ -252,7 +252,7 @@ class Model:
             y = [m.predict(X) for m in self.model]
 
             if self.outputs is not None:
-                y = [self.outputs.inverse_transform(v) for v in y]
+                y = [self.outputs.inverse_transform(v, scaling=scaling) for v in y]
 
             if return_all is True:
                 # return all predictions if explicitly requested
@@ -268,16 +268,15 @@ class Model:
             y = self.model.predict(X)
 
             if self.outputs is not None:
-                y = self.outputs.inverse_transform(y)
+                y = self.outputs.inverse_transform(y, scaling=scaling)
 
             return y
 
-    def fit_predict(self, X, y=None, cv=False, train_params=None, return_all=False,
-                    filtering=True):
+    def fit_predict(self, X, y=None, cv=False, train_params=None, scaling=True, return_all=False):
 
-        history = self.fit(X, y, cv, train_params, filtering)
+        history = self.fit(X, y, cv, train_params, scaling)
 
-        return self.predict(X, return_all)
+        return self.predict(X, scaling, return_all)
 
     def evaluate(self, X, y=None, metric=None, return_all=True):
 
