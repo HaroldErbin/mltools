@@ -16,17 +16,20 @@ and then back to the original format. The interpretation (converting a
 categorical feature to one-hot-encoding, extracting the predictions, etc.)
 is done by other classes or functions.
 
-The data structure can present the data according to 4 modes:
-- flat: all objects are merged in a single 1d array
-- type: all objects of a type are merged in a single array
+The data structure can present the data according to several modes:
+- flat: merged in a single 2d array
 - col: by column name
+- colflat: by column name of 2d array
 """
 
 
 import numpy as np
 import pandas as pd
 
-from mltools.data import datatools
+import sklearn
+from sklearn import preprocessing
+
+import mltools.data.datatools as dt
 from mltools.analysis.logger import Logger
 
 
@@ -37,14 +40,14 @@ from mltools.analysis.logger import Logger
 # TODO: use datatypes to specify which labels to group when using
 #   multi-label encoding, instead of all possibilities
 # TODO: good format for tensorflow
-# TODO: for muli-label, write as tuple of features
+# TODO: for multi-label, write as tuple of features
 
 # transformation modes
 _MODES = ['col', 'type', 'flat']
 
 # supported types
 _TYPES = ['scalar', 'vector', 'matrix', 'tensor']
-# future: text, image, video, graph
+# future:  text, image, video, graph
 
 _TENSOR_ALIAS = {'tensor_0d': 'scalar', 'tensor_1d': 'vector',
                  'tensor_2d': 'matrix'}
@@ -68,7 +71,7 @@ class DataStructure:
 
     def __init__(self, features=None, datatypes=None, shapes=None,
                  with_channels=None, infer=None,
-                 pipeline=None, scaling=None, filter_fn=None, mode='flat',
+                 pipeline=None, scaler=None, filter_fn=None, mode='flat',
                  name=''):
         """
         List of features to be transformed. The types can be inferred from
@@ -98,6 +101,15 @@ class DataStructure:
         2. if `features` is a dict, then the values if they are tuples
         3. the values in `shapes`
         In case 1., the biggest shape appearing in a column will be used.
+
+        The `scaler` argument is a dict mapping features to a scaler defined by a `*Scaler` class
+        from `sklearn.preprocessing`, or by a custom class having similar properties
+        (in particular, with `fit`, `transform` and `inverse_transform` methods). For convenience,
+        strings and floats maps standard scalers with default arguments:
+        - integer: `ConstantScaler` with parameter given by the float
+        - standard: `StandardScaler`
+        - minmax: `MinMaxScaler
+        - robust: `RobustScaler`
 
         The class behaves like an iterator for the list `features`.
 
@@ -145,9 +157,7 @@ class DataStructure:
         if mode == 'type':
             raise NotImplementedError
 
-        # scaling: None, minmax, std
-        if scaling is not None:
-            raise NotImplementedError
+        self.scaler = self.set_scaler(scaler)
 
         # pass data through scikit pipeline before fit or transformation
         # implemented by the class
@@ -270,24 +280,71 @@ class DataStructure:
         name = f" ({self.name})" if self.name else ""
         return "<DataStructure{}: {}>".format(name, list(self.features))
 
-    def __call__(self, X, mode=None, trivial_dim=False):
+    def __call__(self, X, mode=None, scaling=True, trivial_dim=False):
 
-        return self.transform(X, mode, trivial_dim=trivial_dim)
+        return self.transform(X, mode, scaling=scaling, trivial_dim=trivial_dim)
 
     def __len__(self):
         return len(self.features)
 
     @property
     def linear_shape(self):
-        return datatools.linear_shape(self.shapes.values(), cum=True)
+        return dt.linear_shape(self.shapes.values(), cum=True)
 
-    def fit(self, X, y, reset=False):
+    def set_scaler(self, scaler=None):
+        """
+        Set scalers for the data structure.
+        """
 
-        # fit scaling and pipeline
-        # reset parameters allows to train from scratch (useful if executing)
-        # several time the same cell
+        if scaler is None:
+            return {}
 
-        pass
+        if not isinstance(scaler, dict):
+            # TODO: ignore binary data
+            # temporary fix: search for onehot in feature name
+            scaler = {f: scaler for f in self.features if "onehot" not in f}
+
+        scaler = {f: self._verify_scaler(s) for f, s in scaler.items()}
+
+        return scaler
+
+    @staticmethod
+    def _verify_scaler(scaler):
+
+        if isinstance(scaler, str):
+            if scaler == "standard":
+                scaler = preprocessing.StandardScaler()
+            elif scaler == "robust":
+                scaler = preprocessing.RobustScaler()
+            elif scaler == "minmax":
+                scaler = preprocessing.MinMaxScaler()
+            else:
+                raise ValueError(f"`{scaler}` not known.")
+        elif isinstance(scaler, (float, int)):
+            scaler = dt.ConstantScaler(scaler)
+
+        if not isinstance(scaler, sklearn.base.TransformerMixin):
+            raise TypeError("`scaler` must be a subclass of `TransformerMixin`.")
+
+        return scaler
+
+    def fit(self, X, y=None, reset=False):
+        """
+        Fit internal properties of the DataStructure such as scalers.
+
+        Parameter `reset` allows to train from scratch (useful if executing) several time the same
+        cell.
+        """
+
+        if "train" in X:
+            X = X["train"]
+
+        if len(self.scaler) > 0:
+            for f, data in self.transform_col(X, scaling=False, flatten=True).items():
+                if f in self.scaler:
+                    self.scaler[f].fit(data)
+
+        return self
 
     def data_filter(self, X):
         if isinstance(X, (dict, pd.DataFrame)):
@@ -300,8 +357,7 @@ class DataStructure:
         else:
             raise NotImplementedError
 
-    def transform(self, X, mode=None, scaling=True, filtering=True,
-                  trivial_dim=False):
+    def transform(self, X, mode=None, scaling=True, filtering=True, trivial_dim=False):
 
         # can disable filtering and scaling
 
@@ -314,25 +370,64 @@ class DataStructure:
         mode = mode or self.mode
 
         if mode == 'flat':
-            return self.transform_flat(X)
+            return self.transform_flat(X, scaling=scaling)
         elif mode == 'col':
-            return self.transform_col(X, trivial_dim=trivial_dim)
+            return self.transform_col(X, scaling=scaling, flatten=False, trivial_dim=trivial_dim)
+        elif mode == 'colflat':
+            return self.transform_col(X, scaling=scaling, flatten=True)
         else:
             raise ValueError("No mode `{}` available.".format(mode))
 
-    def transform_flat(self, X):
-        return datatools.tab_to_array(self.data_filter(X), flatten=True)
+    def transform_flat(self, X, scaling=False):
 
-    def transform_col(self, X, trivial_dim=False):
-        # keep id column
-        if "id" in X:
-            id_dic = {"id": X["id"]}
-        elif isinstance(X, pd.DataFrame):
-            id_dic = {"id": X.index.to_numpy()}
+        result = []
+
+        for f, data in dt.tab_to_array(self.data_filter(X)).items():
+            result.append(self._transform_array(f, data, scaling=scaling, flatten=True))
+
+        return np.hstack(result)
+
+    def _transform_array(self, feature, array, scaling=False, flatten=False):
+        """
+        Shortcut to transform an array using a scaler.
+
+        The array must be reshaped to 2d before applying the scaler, and then back to its original
+        shape.
+
+        Moreover, the method checks whether there is a scaler for the corresponding feature. If
+        not, it just returns the array.
+        """
+
+        shape = array.shape
+
+        if scaling is True and len(self.scaler) > 0:
+            if feature in self.scaler:
+                array = self.scaler[feature].transform(array.reshape(shape[0], -1))
+
+        if flatten is True:
+            return array.reshape(shape[0], -1)
         else:
-            id_dic = {}
+            return array
 
-        X = {**id_dic, **datatools.tab_to_array(self.data_filter(X))}
+    def transform_col(self, X, scaling=False, flatten=False, trivial_dim=False):
+        """
+        Transform data to a dict of arrays.
+
+        If `flatten` is true, arrays are all 2d.
+        """
+
+        result = {}
+
+        # keep id column
+        if isinstance(X, pd.DataFrame):
+            # this condition must appear first because next condition also matches the id column
+            # in a dataframe but does not convert the index
+            result["id"] = X.index.to_numpy()
+        elif "id" in X:
+            result["id"] = X["id"]
+
+        for f, data in dt.tab_to_array(self.data_filter(X)).items():
+            result[f] = self._transform_array(f, data, scaling=scaling, flatten=flatten)
 
         # TODO: improve this: I think that padding should not be done here
         #       but precise it in the explanations of the class
@@ -344,31 +439,35 @@ class DataStructure:
 
         # if `trivial_dim` is True, include the final `1`
         if trivial_dim is True:
-            for k, v in X.items():
+            for k, v in result.items():
                 if k != 'id' and v.shape[1:] != self.shapes[k]:
-                    X[k] = v.reshape(-1, *self.shapes[k])
+                    result[k] = v.reshape(-1, *self.shapes[k])
 
-        return X
+        return result
 
     def inverse_transform(self, y, scaling=True, filtering=True):
         if isinstance(y, dict):
-            return self.inverse_transform_col(y)
+            return self.inverse_transform_col(y, scaling=scaling)
         elif isinstance(y, np.ndarray):
-            return self.inverse_transform_flat(y)
+            return self.inverse_transform_flat(y, scaling=scaling)
         else:
             raise NotImplementedError
 
-    def inverse_transform_flat(self, y):
-        return self.inverse_transform_col(datatools
-                                          .array_to_dict(y, self.shapes))
+    def inverse_transform_flat(self, y, scaling=False):
+        return self.inverse_transform_col(dt.array_to_dict(y, self.shapes))
 
-    def inverse_transform_col(self, y):
+    def inverse_transform_col(self, y, scaling=False):
         dic = {}
 
         for k, v in y.items():
             shape = v.shape if k in self.with_channels else v.shape[:-1]
             if shape == ():
                 shape = (-1,)
+
+            if scaling is True and len(self.scaler) > 0:
+                if k in self.scaler:
+                    v = self.scaler[k].inverse_transform(v.reshape(shape[0], -1))
+
             dic[k] = v.reshape(*shape)
 
         return dic
@@ -386,7 +485,7 @@ class DataStructure:
 
         # TODO: write second method for more complete average for other types
 
-        return datatools.average(ensemble)
+        return dt.average(ensemble)
 
     def distance(self, x1, x2, metric=None):
         """

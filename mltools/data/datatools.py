@@ -548,7 +548,7 @@ def tab_to_array(data, flatten=False):
     and the second all other dimensions. The latter can be computed with the
     function `linear_shape`.
 
-    Note that no padding: entries with different shapes will yield an error.
+    Note that no padding is performed: entries with different shapes will yield an error.
     """
 
     data = {k: seq_to_array(data[k]) for k in data}
