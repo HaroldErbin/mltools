@@ -278,7 +278,7 @@ class Model:
 
         return self.predict(X, scaling, return_all)
 
-    def evaluate(self, X, y=None, metric=None, return_all=True):
+    def evaluate(self, X, y=None, metric=None, scaling=True, return_all=True):
 
         # TODO: loop over train, test...
 
@@ -288,13 +288,15 @@ class Model:
         if self.outputs is not None:
             y = self.outputs(y, mode='col')
 
-        pred = self.predict(X, return_all=True)
+        pred = self.predict(X, scaling=scaling, return_all=True)
 
         if self.n_models > 1:
             # TODO: this assumes that y is a dict, which may not be true
             pred = {f: np.array([p[f] for p in pred]) for f in self.outputs}
 
         # TODO: statistics if return_all is False
+        if return_all is False:
+            raise NotImplementedError
 
         return MetricLookup.evaluate(y, pred, metric=None, n=self.n_models)
 
@@ -560,7 +562,7 @@ class Model:
                                     filename, logtime, logger)
 
     def learning_curve(self, X, y=None, train_params=None, ratios=None, val_ratio=0., metric=None,
-                       filtering=True, filename="", logtime=False, logger=None):
+                       scaling=True, filename="", logtime=False, logger=None):
         """
         Compute learning curve.
 
@@ -612,10 +614,12 @@ class Model:
 
             model = self.copy_model()
 
-            model.fit(X_train, y_train, train_params=train_params, filtering=filtering)
+            model.fit(X_train, y_train, train_params=train_params, scaling=scaling)
 
-            scores_train = self.evaluate(X_eval["trainval"], y_eval["trainval"], metric=metric)
-            scores_test = self.evaluate(X_eval["test"], y_eval["test"], metric=metric)
+            scores_train = self.evaluate(X_eval["trainval"], y_eval["trainval"], metric=metric,
+                                         scaling=scaling)
+            scores_test = self.evaluate(X_eval["test"], y_eval["test"], metric=metric,
+                                        scaling=scaling)
 
             for f in self.outputs:
                 scores[f]["train"] = dt.update_dict_array(scores[f]["train"], scores_train[f])

@@ -438,10 +438,15 @@ class DataStructure:
         # the only point can be the additional `1` of the last dimension.
 
         # if `trivial_dim` is True, include the final `1`
-        if trivial_dim is True:
-            for k, v in result.items():
-                if k != 'id' and v.shape[1:] != self.shapes[k]:
-                    result[k] = v.reshape(-1, *self.shapes[k])
+        if flatten is False:
+            if trivial_dim is True:
+                for k, v in result.items():
+                    if k != 'id' and v.shape[1:] != self.shapes[k]:
+                        result[k] = v.reshape(-1, *self.shapes[k])
+            else:
+                for k, v in result.items():
+                    if k != 'id' and v.shape[-1] == 1:
+                        result[k] = v.reshape(*v.shape[:-1])
 
         return result
 
