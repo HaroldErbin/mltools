@@ -39,31 +39,43 @@ class NeuralNetPredictor():
 
 class NeuralNet(Model):
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None,
-                 n=1, method=None, name=""):
+    model_name = "Neural Network"
 
-        Model.__init__(self, inputs, outputs, model_params, model_fn, n, method, name)
+    # model_fn must be provided
+    _model_fn_required = True
 
-        if self.model_fn is None:
-            raise ValueError("`model_fn` must be provided for a neural network.")
+    def reset_model(self, model_params):
+        """
+        Reset model using given parameters.
 
-        if n > 1:
-            self.submodels = [self.create_model() for n in range(self.n)]
-            self.model = [m["model"] for m in self.submodels]
+        This method is called at initialization if model parameters are given. It is useful to
+        have a separate methods when the model must be created several times, for example, when
+        computing learning curves or performing hyperparameter tuning.
+        """
+
+        if model_params is None:
+            self.model_params = {}
+
+            self.model = None
+            self.submodels = None
+        else:
+            self.model_params = model_params
+
+        if self.n > 1:
+            self.submodels = [self.create_model() for i in range(self.n)]
+            self.model = [m["main"] for m in self.submodels]
             model = self.model[0]
         else:
             # dict of models
             self.submodels = self.create_model()
             # main model
-            self.model = self.submodels["model"]
+            self.model = self.submodels["main"]
             model = self.model
 
-        self.model_name = "Neural Network"
-
-        # read loss and metric names from model parameters, otherwise
-        # read from Keras model
-
+        # TODO: improve the definition of losses, make contact with module metrics.py
         # TODO: metric names in Keras are not abbreviated
+
+        # read loss and metric names from model parameters, otherwise read from Keras model
         self.loss = self.model_params.get('loss', model.loss)
         self.metrics = self.model_params.get('metrics',
                                              list({self.loss} | set(model.metrics_names[1:])))

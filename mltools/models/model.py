@@ -52,6 +52,23 @@ class Model:
 
     _per_run_keys = ["epochs", "train_time", "preprocess_time"]
 
+    submodels = None
+    # this must be instantiated for each model class because it may
+    # depend on additional parameters not defined in the general class
+    # (and, conversely, defining these parameters need model_params to
+    # have been defined just before)
+    model = None
+
+    loss = None
+    metrics = None
+
+    # define base for model name
+    # this must be changed in each model subclass (as attribute or property)
+    model_name = "Model"
+
+    # if true, argument `model_fn` must be given when creating an instance
+    _model_fn_required = False
+
     def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
                  method=None, name=""):
         """
@@ -64,6 +81,17 @@ class Model:
         :param n: number of models to train
         :type outputs: `int`
         """
+
+        if self._model_fn_required is True and model_fn is None:
+            raise ValueError("`model_fn` argument must be provided.")
+
+        # keep all train parameters used (updated only by some models)
+        self.train_params_history = []
+
+        # training history: training times, etc.
+        self.history = {}
+        # training history: metrics for each epoch (neural network)
+        self.metric_history = {}
 
         # TODO: weird bug where DataStructure is no recognized
         # if (inputs is not None
@@ -85,44 +113,21 @@ class Model:
 
         self.n = n
 
-        # keep all train parameters used (updated only by some models)
-        self.train_params_history = []
-
-        # training history: training times, etc.
-        self.history = {}
-        # training history: metrics for each epoch (neural network)
-        self.metric_history = {}
-
         # method used (in general classification or regression)
         # defined only for some models
         self.method = self._get_method(method)
 
-        if model_params is None:
-            self.model_params = {}
-        else:
-            self.model_params = model_params
-
         self.model_fn = model_fn
 
-        # define loss and metrics name by looking in model parameters
-        # if no loss is given, use 'loss' for the loss function
-        # if no metric is given, use the name of the loss
-        self.loss = self.model_params.get('loss', 'loss')
-        self.metrics = self.model_params.get('metrics', [self.loss])
-
-        self.submodels = None
-        # this must be instantiated for each model class because it may
-        # depend on additional parameters not defined in the general class
-        # (and, conversely, defining these parameters need model_params to
-        # have been defined just before)
-        self.model = None
-
-        # define base for model name
-        # this will be changed in each model
-        self.model_name = "Model"
         # instance based name to distinguish the models used
         # this is combined with model_name to give the full name
         self.name = name
+
+        # create model if model_param is given
+        if model_params is not None:
+            self.reset_model(model_params)
+        else:
+            self.model_params = {}
 
     def __str__(self):
         return "{}: {}".format(self.model_name, self.name or hex(id(self)))
@@ -376,8 +381,54 @@ class Model:
 
         raise NotImplementedError
 
+    def reset_model(self, model_params=None):
+        """
+        Reset model using given parameters.
+
+        This method is called at initialization if model parameters are given. It is useful to
+        have a separate methods when the model must be created several times, for example, when
+        computing learning curves or performing hyperparameter tuning.
+        """
+
+        if model_params is None:
+            self.model_params = {}
+
+            self.model = None
+            self.submodels = None
+        else:
+            self.model_params = model_params
+
+        # define loss and metrics name by looking in model parameters
+        # if no loss is given, use 'loss' for the loss function
+        self.loss = self.model_params.get('loss', 'loss')
+        # if no metric is given, use the name of the loss
+        self.metrics = self.model_params.get('metrics', [self.loss])
+
+        if self.n > 1:
+            self.model = [self.create_model() for i in range(self.n)]
+        else:
+            self.model = self.create_model()
+
+        print(self.model)
+
+        self.submodels = None
+
     def create_model(self):
-        # useful for creating several models (for bagging, cross-validation...)
+        """
+        Create a model with given parameters.
+
+        This method must be implemented independently for each model subclass. It must selects the
+        appropriate class (and package) depending on the arguments provided.
+
+        Since the argument contains parameters for both the class and for the algorithm, the
+        method in the subclass must take care of cleaning the model parameters before
+        sending them to the algorithm.
+
+        This method returns a model instance from the chosen algorithm.
+
+        This method must also update the `model_params` attribute with default parameters if they
+        are missing.
+        """
 
         raise NotImplementedError("Trying to call abstract `Model` class.")
 

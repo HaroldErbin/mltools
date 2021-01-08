@@ -4,30 +4,21 @@ from .model import Model
 
 
 class LinearRegression(Model):
+    """
+    Linear regression.
 
-    def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
-                 method="reg", name=""):
-        """
-        Linear regression.
+    Regularization can be given in `model_params` as `l1` and `l2` or as `alpha` and `rho`. The
+    appropriate class is chosen depending on which regularization is used. The default choice for
+    `alpha` only is Lasso regression.
+    """
 
-        Regularization can be given in `model_params` as `l1` and `l2` or
-        as `alpha` and `rho`. The appropriate class is chosen depending
-        on which regularization is used. The default choice for `alpha` only
-        is Lasso regression.
-        """
-
-        # TODO: add classification task
-
-        Model.__init__(self, inputs, outputs, model_params, model_fn, n, method, name)
-
-        if n > 1:
-            self.model = [self.create_model() for n in range(self.n)]
-        else:
-            self.model = self.create_model()
-
-        self.model_name = "LinearRegression"
+    @property
+    def model_name(self):
+        return "Linear regression"
 
     def create_model(self):
+
+        # TODO: add classification task
 
         params = self.model_params.copy()
 
