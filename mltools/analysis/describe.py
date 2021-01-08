@@ -739,6 +739,7 @@ def learning_curve_plot(scores, metrics=None, filename=None, logtime=None, logge
 
     scores = scores.copy()
     ratios = scores.pop('ratios')
+    n_samples = scores.pop('n_samples')
 
     figs = []
 

@@ -7,8 +7,10 @@ import json
 
 import numpy as np
 
+from sklearn.base import RegressorMixin, ClassifierMixin
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import ParameterGrid, ParameterSampler
+from sklearn.ensemble import BaggingRegressor, BaggingClassifier
 
 from mltools.data import datatools as dt
 from mltools.data.sample import RatioSample
@@ -31,6 +33,61 @@ from mltools.analysis.predictions import Predictions
 #   - else, train with cross-validation
 #   then, return all results
 #   question: compute mean and std here or in predictions?
+
+
+class Bag:
+
+    def __init__(self, model, n=1, method=None, n_jobs=None):
+        self.parent_model = model
+        self.n = n
+
+        self.n_jobs = n_jobs
+
+        # estimator used in bag: used to check which type it is
+        self.estimator = model.create_model()
+
+        # use scikit if possible
+        if isinstance(self.estimator, RegressorMixin):
+            self.bag = BaggingRegressor(self.estimator, n_estimators=n, n_jobs=n_jobs)
+        elif isinstance(self.estimator, ClassifierMixin):
+            self.bag = BaggingClassifier(self.estimator, n_estimators=n, n_jobs=n_jobs)
+        else:
+        # if True:
+            models = [model.create_model() for i in range(self.n)]
+            if isinstance(self.estimator, dict):
+                # the estimator is made of submodels
+                self.submodel_bag = models
+                self.bag = [m["main"] for m in self.submodels]
+            else:
+                self.submodel_bag = None
+                self.bag = models
+
+    def __len__(self):
+        return self.n
+
+    def fit(self, X, y=None, cv=False, train_params=None):
+
+        n_jobs = train_params.get("n_jobs", None) or self.n_jobs
+        verbose = train_params.get("verbose", 0)
+
+        if isinstance(self.bag, list):
+        # if True:
+            results = []
+
+            for i, m in enumerate(self.bag):
+                if verbose > 0:
+                    print(f"\n# Training model {i+1}/{len(self.bag)}\n")
+
+                results.append(m.fit(X, y))
+        else:
+            self.bag.n_jobs = n_jobs
+            self.bag.verbose = verbose
+
+            self.bag.fit(X, y)
+
+    def predict(self):
+        pass
+        # scikit: use estimators_ to get results for each model and get statistics
 
 
 class Model:
@@ -71,7 +128,7 @@ class Model:
     _model_fn_required = False
 
     def __init__(self, inputs=None, outputs=None, model_params=None, model_fn=None, n=1,
-                 method=None, name=""):
+                 method=None, n_jobs=None, name=""):
         """
         :param inputs: how input data to the various function should be
             converted before feeding to the model
@@ -118,6 +175,8 @@ class Model:
         # defined only for some models
         self.method = self._get_method(method)
 
+        self.n_jobs = n_jobs
+
         self.model_fn = model_fn
 
         # instance based name to distinguish the models used
@@ -134,7 +193,7 @@ class Model:
         return "{}: {}".format(self.model_name, self.name or hex(id(self)))
 
     def __repr__(self):
-        if self.model_params == {}:
+        if len(self.model_params) == 0:
             return '<{}>'.format(str(self))
         else:
             return '<{}: {}>'.format(str(self), self.model_params)
@@ -170,6 +229,8 @@ class Model:
 
         if isinstance(self.model, (list, tuple)):
             return len(self.model)
+        elif isinstance(self.model, Bag):
+            return self.n
         else:
             return 1
 
@@ -207,30 +268,14 @@ class Model:
 
         preprocess_time = time.monotonic() - begin_preprocess
 
-        # TODO: update history
+        begin_train = time.monotonic()
 
         if self.n_models > 1:
-            # TODO: if using scikit to train on multi-core, not sure that it will be possible
-            #       to time each model individually (if not, do a mean)
-
-            train_time = []
-            results = []
-
-            for i, m in enumerate(self.model):
-                if verbose > 0:
-                    print(f"\n# Training model {i+1}/{len(self.model)}\n")
-
-                begin_train = time.monotonic()
-
-                results.append(m.fit(X, y))
-
-                train_time.append(time.monotonic() - begin_train)
+            results = self.model.fit(X, y, train_params=train_params)
         else:
-            begin_train = time.monotonic()
-
             results = self.model.fit(X, y)
 
-            train_time = time.monotonic() - begin_train
+        train_time = time.monotonic() - begin_train
 
         history = self._update_history(train_time=train_time, preprocess_time=preprocess_time)
 
@@ -406,7 +451,7 @@ class Model:
         self.metrics = self.model_params.get('metrics', [self.loss])
 
         if self.n > 1:
-            self.model = [self.create_model() for i in range(self.n)]
+            self.model = Bag(self, n=self.n, method=self.method, n_jobs=self.n_jobs)
         else:
             self.model = self.create_model()
 
@@ -525,35 +570,21 @@ class Model:
         """
         Return the total training time.
 
-        For a bag of models, return all the mean training time and standard deviation.
+        For a bag of models, return the total and mean training time.
         """
 
         times = {}
 
+        times["total_train_time"] = np.sum(self.history["train_time"])
+
         if self.n_models > 1:
-            train_time, train_time_std = dt.average(self.history["train_time"], axis=1)
-            times["train_time"] = np.sum(train_time)
-            times["train_time_std"] = np.sum(train_time_std)
-
-            times["total_train_time"] = np.sum(self.history["train_time"])
-
-            if include_preprocess is True:
-                preprocess_time, preprocess_time_std = dt.average(self.history["preprocess_time"],
-                                                                  axis=1)
-                times["preprocess_time"] = np.sum(preprocess_time)
-                times["preprocess_time_std"] = np.sum(preprocess_time_std)
-
-                times["total_train_time"] += np.sum(self.history["preprocess_time"])
-
+            times["train_time"] = times["total_train_time"] / self.n_models
         else:
-            times["train_time"] = np.sum(self.history["train_time"])
+            times["train_time"] = times["total_train_time"]
 
-            times["total_train_time"] = times["train_time"]
-
-            if include_preprocess is True:
-                times["preprocess_time"] = self.history["preprocess_time"]
-
-                times["total_train_time"] += times["preprocess_time"]
+        if include_preprocess is True:
+            times["preprocess_time"] = self.history["preprocess_time"]
+            times["total_train_time"] += times["preprocess_time"]
 
         if mode == "text":
             times = {k: Logger.format_time(v) for k, v in times.items()}
@@ -563,25 +594,14 @@ class Model:
                                        times.get("preprocessing_time", ""))))
             val_fmt = "- {:<14} {:>%d}\n" % val_maxlen
 
-            if self.n_models > 1:
-                std_maxlen = max(map(len, (times["train_time_std"],
-                                           times.get("preprocessing_time_std", ""))))
-                valstd_fmt = "- {:<14} {:>%d} ± {:>%d}\n" % (val_maxlen, std_maxlen)
-
+            if include_preprocess is True:
                 text = val_fmt.format("total", times["total_train_time"])
-
-                text += valstd_fmt.format("training", times["train_time"], times["train_time_std"])
-
-                if include_preprocess is True:
-                    text += valstd_fmt.format("preprocessing", times["preprocess_time"],
-                                              times["preprocess_time_std"])
+                text += val_fmt.format("training", times["train_time"])
+                text += val_fmt.format("preprocessing", times["preprocess_time"])
             else:
-                if include_preprocess is True:
-                    text = val_fmt.format("total", times["total_train_time"])
+                text = times["total_train_time"]
+                if self.n_models > 1:
                     text += val_fmt.format("training", times["train_time"])
-                    text += val_fmt.format("preprocessing", times["preprocess_time"])
-                else:
-                    text = times["total_train_time"]
 
             return text
         else:
@@ -638,13 +658,14 @@ class Model:
         if "train" in X and "val" in X:
             # if X is already split and contains both train and validation data, combine them
             # TODO: merge sets
-            raise NotImplementedError("Cannot deal with training data split in train and "
-                                      "validation sets.")
+            X = X['train']
         elif "train" in X:
             X = X['train']
 
         if y is None:
             y = X
+
+        scores["n_samples"] = len(X)
 
         for x in ratios:
             x = np.round(x, 10)
@@ -666,10 +687,10 @@ class Model:
 
             model.fit(X_train, y_train, train_params=train_params, scaling=scaling)
 
-            scores_train = self.evaluate(X_eval["trainval"], y_eval["trainval"], metric=metric,
+            scores_train = model.evaluate(X_eval["trainval"], y_eval["trainval"], metric=metric,
+                                          scaling=scaling)
+            scores_test = model.evaluate(X_eval["test"], y_eval["test"], metric=metric,
                                          scaling=scaling)
-            scores_test = self.evaluate(X_eval["test"], y_eval["test"], metric=metric,
-                                        scaling=scaling)
 
             for f in self.outputs:
                 scores[f]["train"] = dt.update_dict_array(scores[f]["train"], scores_train[f])
