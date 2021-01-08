@@ -8,6 +8,7 @@ import json
 import numpy as np
 
 from sklearn.pipeline import Pipeline
+from sklearn.model_selection import ParameterGrid, ParameterSampler
 
 from mltools.data import datatools as dt
 from mltools.data.sample import RatioSample
@@ -409,8 +410,6 @@ class Model:
         else:
             self.model = self.create_model()
 
-        print(self.model)
-
         self.submodels = None
 
     def create_model(self):
@@ -690,6 +689,109 @@ class Model:
         fig = descr.learning_curve_plot(scores, metric, pdfname, logtime, logger)
 
         return scores, fig
+
+    def hyperparameter_tuning(self, X, y=None, method='grid', model_params=None, train_params=None,
+                              val_ratio=0., metric=None, n_iter=20, scaling=True, filename="",
+                              logtime=False, logger=None):
+        """
+        Perform hyperparameter tuning.
+
+        This evaluates sequentially a model with different model and train parameters. If possible,
+        it is recommended to use Scikit (or derived) API to parallelize the search. However, this
+        allows to optimize models with several outputs (which cannot be written as an array, for
+        example, a non-sequential neural network).
+
+        TODO: implement CV search with scikit and tune
+        define automatically a scorer function which can uses DataStructure and Metric
+        https://docs.ray.io/en/master/tune/api_docs/sklearn.html
+        https://scikit-learn.org/stable/modules/model_evaluation.html#multimetric-scoring
+        """
+
+        # TODO: check what is done in Scikit to do the same
+        # TODO: define single metric to use for finding best model
+        #       (if multi-outputs or several metrics)
+
+        # parameter dict are generated with Scikit, which can work only with a single set of
+        # parameters
+        model_keys = model_params.keys()
+
+        if train_params is None:
+            train_params = {}
+            train_keys = {}
+        else:
+            train_keys = train_params.keys()
+
+        verbose = train_params.get("verbose", 0)
+
+        logger = logger or Logger()
+
+        if y is None:
+            y = X
+
+        if "train" in X and "val" in X:
+            X = {"train": X["train"], "val": X["val"]}
+            y = {"train": y["train"], "val": y["val"]}
+        else:
+            if "train" in X:
+                X = X['train']
+                X = X['train']
+
+            if val_ratio == 0:
+                raise ValueError("If validation data is not provided, `val_ratio` cannot be 0.")
+
+            sampling = RatioSample({"train": val_ratio, "val": 1 - val_ratio})
+            X, y = sampling([X, y], shuffle=True)
+
+        if not isinstance(train_params, dict):
+            raise TypeError(f"`train_params` must be a dict, found `{type(train_params)}`.")
+
+        if isinstance(model_params, (tuple, list)):
+            param_set = [{**train_params, **p} for p in model_params]
+        elif isinstance(model_params, dict):
+            param_set = {**train_params, **model_params}
+        else:
+            raise TypeError(f"`model_params` must be a dict or list, found `{type(train_params)}`.")
+
+        if method == "grid":
+            all_params = ParameterGrid(param_set)
+        elif method == "random":
+            all_params = ParameterSampler(param_set, n_iter=n_iter)
+            # TODO: allow to change rounding
+            all_params = [dict((k, round(v, 6)) for (k, v) in d.items()) for d in all_params]
+        else:
+            raise ValueError(f"Method '{method}' unknown.")
+
+        # store results for each parameter
+        scores = []
+
+        for i, params in enumerate(all_params):
+
+            if verbose > 0:
+                print(f"\n# Parameter set: {i}/{len(all_params)}\n")
+
+            t_params = {k: params[k] for k in train_keys}
+            m_params = {k: params[k] for k in model_keys}
+
+            param_scores = {f: {"train": {}, "val": {}} for f in self.outputs}
+
+            self.reset_model(m_params)
+            self.fit(X, y, train_params=t_params, scaling=scaling)
+
+            scores_train = self.evaluate(X["train"], y["train"], metric=metric, scaling=scaling)
+            scores_val = self.evaluate(X["val"], y["val"], metric=metric, scaling=scaling)
+
+            # if self.n_models > 1:
+            #     for f in self.outputs:
+            #         param_scores[f]["train"].update(dt.average(scores[f]["train"], axis=1, mergedict=True))
+            #         param_scores[f]["val"].update(dt.average(scores[f]["val"], axis=1, mergedict=True))
+
+            scores.append({"model_params": m_params, "train_params": t_params,
+                           "train_scores": scores_train, "val_scores": scores_val})
+
+        # if filename != "":
+        #     logger.save_json(scores, filename=filename + '.json', logtime=logtime)
+
+        return scores
 
     def summary(self, save_model_params=True, save_train_params=True,
                 save_history=True, save_io=True,
